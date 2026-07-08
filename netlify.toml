@@ -1,0 +1,12 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# SPA fallback so client-side routes (e.g. /login) resolve on refresh/deep-link.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
