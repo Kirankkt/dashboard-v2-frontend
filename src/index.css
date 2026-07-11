@@ -210,13 +210,13 @@ svg { display: block; }
 .tbl .t-name { font-weight: 550; color: var(--text); }
 .tbl .t-sub { font-family: var(--font-mono); font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-subtle); }
 
-.row-actions { position: relative; display: inline-block; }
 .row-more { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 6px; color: var(--text-subtle); cursor: pointer; border: 0; background: transparent; }
 .row-more svg { width: 18px; height: 18px; }
 .row-more:hover { color: var(--text); background: var(--surface-3); }
 
-.menu-backdrop { position: fixed; inset: 0; z-index: 15; }
-.menu { position: absolute; right: 0; top: calc(100% + 4px); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-md); padding: 4px; min-width: 152px; z-index: 20; }
+.menu-anchor { display: inline-block; }
+.menu-backdrop { position: fixed; inset: 0; z-index: 40; }
+.menu { position: fixed; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); padding: 5px; min-width: 168px; z-index: 45; transform-origin: top; transition: opacity .12s ease, transform .12s ease; }
 .menu button { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; font-family: var(--font-sans); font-size: 0.8125rem; color: var(--text); background: transparent; border: 0; border-radius: 6px; padding: 8px 10px; cursor: pointer; }
 .menu button:hover { background: var(--surface-2); }
 .menu button svg { width: 15px; height: 15px; color: var(--text-muted); }
@@ -224,7 +224,6 @@ svg { display: block; }
 .menu button.danger svg { color: var(--danger); }
 .menu .menu-sep { height: 1px; background: var(--border); margin: 4px 2px; }
 
-.status-ctl { position: relative; display: inline-block; }
 .pill-btn { border: 0; cursor: pointer; font: inherit; }
 .pill-caret svg { width: 12px; height: 12px; margin-left: 1px; }
 

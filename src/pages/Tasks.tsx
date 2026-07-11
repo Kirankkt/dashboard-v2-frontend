@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/AppShell";
+import { Menu } from "../components/Menu";
 import { StatusControl } from "../components/StatusControl";
 import { TaskModal } from "../components/TaskModal";
 import { useAuth } from "../auth/AuthContext";
@@ -31,7 +32,6 @@ export default function Tasks() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [modal, setModal] = useState<{ open: boolean; task: Task | null }>({ open: false, task: null });
-  const [rowMenu, setRowMenu] = useState<number | null>(null);
 
   async function load() {
     setLoading(true);
@@ -82,7 +82,6 @@ export default function Tasks() {
     setModal({ open: false, task: null });
   }
   async function remove(t: Task) {
-    setRowMenu(null);
     if (!window.confirm(`Delete “${t.name}”? This can't be undone.`)) return;
     try {
       await deleteTask(token, t.id);
@@ -171,19 +170,15 @@ export default function Tasks() {
                     <td><StatusControl value={t.status} editable={!!canEdit} onChange={(s) => changeStatus(t, s)} /></td>
                     {canEdit && (
                       <td>
-                        <div className="row-actions">
-                          <button className="row-more" type="button" aria-label="Row actions" onClick={() => setRowMenu(rowMenu === t.id ? null : t.id)}><IconMore /></button>
-                          {rowMenu === t.id && (
+                        <Menu triggerClassName="row-more" triggerLabel="Row actions" trigger={<IconMore />}>
+                          {(close) => (
                             <>
-                              <div className="menu-backdrop" onClick={() => setRowMenu(null)} />
-                              <div className="menu">
-                                <button type="button" onClick={() => { setModal({ open: true, task: t }); setRowMenu(null); }}><IconEdit />Edit</button>
-                                <div className="menu-sep" />
-                                <button type="button" className="danger" onClick={() => remove(t)}><IconTrash />Delete</button>
-                              </div>
+                              <button type="button" onClick={() => { setModal({ open: true, task: t }); close(); }}><IconEdit />Edit</button>
+                              <div className="menu-sep" />
+                              <button type="button" className="danger" onClick={() => { close(); remove(t); }}><IconTrash />Delete</button>
                             </>
                           )}
-                        </div>
+                        </Menu>
                       </td>
                     )}
                   </tr>

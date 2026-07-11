@@ -1,6 +1,6 @@
-import { useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { Menu } from "./Menu";
 import { ThemeToggle } from "./ThemeToggle";
 import {
   IconTasks,
@@ -31,7 +31,6 @@ interface Props {
 
 export function AppShell({ title, titleIcon, actions, children }: Props) {
   const { user, logout } = useAuth();
-  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <div className="shell">
@@ -43,30 +42,23 @@ export function AppShell({ title, titleIcon, actions, children }: Props) {
         <button className="rail-btn" type="button" aria-label="Crew — coming soon" title="Crew — coming soon"><IconCrew /></button>
         <button className="rail-btn" type="button" aria-label="Settings — coming soon" title="Settings — coming soon"><IconSettings /></button>
         <div className="rail-spacer" />
-        <div className="status-ctl">
-          <button
-            className="rail-avatar"
-            type="button"
-            onClick={() => setMenuOpen((v) => !v)}
-            title={`${user?.name} · ${user?.role}`}
-            aria-label="Account menu"
-          >
-            {initials(user?.name)}
-          </button>
-          {menuOpen && (
+        <Menu
+          trigger={initials(user?.name)}
+          triggerClassName="rail-avatar"
+          triggerLabel="Account menu"
+          align="start"
+        >
+          {() => (
             <>
-              <div className="menu-backdrop" onClick={() => setMenuOpen(false)} />
-              <div className="menu" style={{ left: 0, right: "auto", top: "auto", bottom: "calc(100% + 4px)" }}>
-                <div style={{ padding: "6px 10px" }}>
-                  <div style={{ fontSize: "0.8125rem", fontWeight: 600 }}>{user?.name}</div>
-                  <div className="hint">{user?.email}</div>
-                </div>
-                <div className="menu-sep" />
-                <button type="button" className="danger" onClick={logout}><IconLogout />Log out</button>
+              <div style={{ padding: "6px 10px" }}>
+                <div style={{ fontSize: "0.8125rem", fontWeight: 600 }}>{user?.name}</div>
+                <div className="hint">{user?.email}</div>
               </div>
+              <div className="menu-sep" />
+              <button type="button" className="danger" onClick={logout}><IconLogout />Log out</button>
             </>
           )}
-        </div>
+        </Menu>
       </nav>
 
       <div className="app-main">

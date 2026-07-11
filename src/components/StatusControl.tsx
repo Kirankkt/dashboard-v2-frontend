@@ -1,5 +1,5 @@
-import { useState } from "react";
 import type { TaskStatus } from "../lib/tasks";
+import { Menu } from "./Menu";
 import { IconChevronDown } from "./icons";
 
 const LABEL: Record<TaskStatus, string> = {
@@ -21,41 +21,30 @@ interface Props {
 }
 
 export function StatusControl({ value, editable, onChange }: Props) {
-  const [open, setOpen] = useState(false);
-
   if (!editable) return <span className={`pill ${CLS[value]}`}>{LABEL[value]}</span>;
 
   return (
-    <span className="status-ctl">
-      <button
-        type="button"
-        className={`pill pill-btn pill-caret ${CLS[value]}`}
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="menu"
-      >
-        {LABEL[value]}
-        <IconChevronDown />
-      </button>
-      {open && (
-        <>
-          <div className="menu-backdrop" onClick={() => setOpen(false)} />
-          <div className="menu" role="menu">
-            {ORDER.map((s) => (
-              <button
-                key={s}
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  onChange(s);
-                  setOpen(false);
-                }}
-              >
-                <span className={`pill ${CLS[s]}`} style={{ pointerEvents: "none" }}>{LABEL[s]}</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </span>
+    <Menu
+      triggerClassName={`pill pill-btn pill-caret ${CLS[value]}`}
+      triggerLabel="Change status"
+      align="start"
+      trigger={<>{LABEL[value]}<IconChevronDown /></>}
+    >
+      {(close) =>
+        ORDER.map((s) => (
+          <button
+            key={s}
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onChange(s);
+              close();
+            }}
+          >
+            <span className={`pill ${CLS[s]}`} style={{ pointerEvents: "none" }}>{LABEL[s]}</span>
+          </button>
+        ))
+      }
+    </Menu>
   );
 }
