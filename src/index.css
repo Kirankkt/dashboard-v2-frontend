@@ -323,6 +323,8 @@ svg { display: block; }
 .dt-name { font-size: 0.875rem; font-weight: 550; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .dt-meta { font-family: var(--font-mono); font-size: 0.6875rem; color: var(--text-subtle); margin-top: 2px; }
 .dt-date { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); min-width: 74px; flex-shrink: 0; }
+.dt-more { display: block; padding: 11px 16px; border-top: 1px solid var(--border); font-size: 0.8125rem; font-weight: 550; color: var(--accent); text-decoration: none; }
+.dt-more:hover { background: var(--surface-2); text-decoration: underline; }
 
 .prog-hero { display: flex; align-items: center; gap: 20px; padding: 18px 16px 8px; }
 .prog-num { font-family: var(--font-mono); font-size: 2.375rem; font-weight: 600; letter-spacing: -0.03em; line-height: 1; }

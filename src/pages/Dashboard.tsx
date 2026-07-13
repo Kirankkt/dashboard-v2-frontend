@@ -19,6 +19,13 @@ import type { ApiError } from "../lib/api";
 function dueDate(t: Task) {
   return t.end_date ?? t.start_date;
 }
+
+// Dashboard panels are summaries — cap the rows and link out for the rest.
+const MAX_ROWS = 8;
+function MoreLink({ total, to }: { total: number; to: string }) {
+  if (total <= MAX_ROWS) return null;
+  return <Link className="dt-more" to={to}>+{total - MAX_ROWS} more — view all</Link>;
+}
 function daysLate(t: Task, today: string) {
   const ms = new Date(today + "T00:00:00").getTime() - new Date(dueDate(t) + "T00:00:00").getTime();
   return Math.max(1, Math.round(ms / 86400000));
@@ -131,18 +138,21 @@ export default function Dashboard() {
               {d.todayTasks.length === 0 ? (
                 <div className="panel-empty"><IconCheck />Nothing scheduled for today.</div>
               ) : (
-                d.todayTasks.map((t) => (
-                  <div key={t.id} className={`dt-row ${t.priority === "high" ? "is-high" : ""}`}>
-                    <div className="dt-main">
-                      <div className="dt-name">
-                        {t.priority === "high" && <span className="prio-badge"><IconFlag />High priority</span>}
-                        {t.name}
+                <>
+                  {d.todayTasks.slice(0, MAX_ROWS).map((t) => (
+                    <div key={t.id} className={`dt-row ${t.priority === "high" ? "is-high" : ""}`}>
+                      <div className="dt-main">
+                        <div className="dt-name">
+                          {t.priority === "high" && <span className="prio-badge"><IconFlag />High priority</span>}
+                          {t.name}
+                        </div>
+                        <div className="dt-meta">{t.area} · {t.trade || "—"} · {t.workers}w · {t.hours}h</div>
                       </div>
-                      <div className="dt-meta">{t.area} · {t.trade || "—"} · {t.workers}w · {t.hours}h</div>
+                      <StatusControl value={t.status} editable onChange={(s) => changeStatus(t, s)} />
                     </div>
-                    <StatusControl value={t.status} editable onChange={(s) => changeStatus(t, s)} />
-                  </div>
-                ))
+                  ))}
+                  <MoreLink total={d.todayTasks.length} to="/tasks" />
+                </>
               )}
             </section>
 
@@ -154,20 +164,23 @@ export default function Dashboard() {
               {d.overdue.length === 0 ? (
                 <div className="panel-empty"><IconCheck />Nothing overdue. Great work.</div>
               ) : (
-                d.overdue.map((t) => (
-                  <div key={t.id} className={`dt-row ${t.priority === "high" ? "is-high" : ""}`}>
-                    <div className="dt-main">
-                      <div className="dt-name">
-                        {t.priority === "high" && <span className="prio-badge"><IconFlag />High priority</span>}
-                        {t.name}
+                <>
+                  {d.overdue.slice(0, MAX_ROWS).map((t) => (
+                    <div key={t.id} className={`dt-row ${t.priority === "high" ? "is-high" : ""}`}>
+                      <div className="dt-main">
+                        <div className="dt-name">
+                          {t.priority === "high" && <span className="prio-badge"><IconFlag />High priority</span>}
+                          {t.name}
+                        </div>
+                        <div className="dt-meta">
+                          {t.area} · due {fmtShort(dueDate(t))} · <span className="late">{daysLate(t, today)}d late</span>
+                        </div>
                       </div>
-                      <div className="dt-meta">
-                        {t.area} · due {fmtShort(dueDate(t))} · <span className="late">{daysLate(t, today)}d late</span>
-                      </div>
+                      <StatusControl value={t.status} editable onChange={(s) => changeStatus(t, s)} />
                     </div>
-                    <StatusControl value={t.status} editable onChange={(s) => changeStatus(t, s)} />
-                  </div>
-                ))
+                  ))}
+                  <MoreLink total={d.overdue.length} to="/tasks" />
+                </>
               )}
             </section>
 
@@ -179,18 +192,21 @@ export default function Dashboard() {
               {d.upcoming.length === 0 ? (
                 <div className="panel-empty">Nothing scheduled in the next 7 days.</div>
               ) : (
-                d.upcoming.map((t) => (
-                  <div key={t.id} className={`dt-row ${t.priority === "high" ? "is-high" : ""}`}>
-                    <span className="dt-date">{fmtShort(t.start_date)}</span>
-                    <div className="dt-main">
-                      <div className="dt-name">
-                        {t.priority === "high" && <span className="prio-badge"><IconFlag />High priority</span>}
-                        {t.name}
+                <>
+                  {d.upcoming.slice(0, MAX_ROWS).map((t) => (
+                    <div key={t.id} className={`dt-row ${t.priority === "high" ? "is-high" : ""}`}>
+                      <span className="dt-date">{fmtShort(t.start_date)}</span>
+                      <div className="dt-main">
+                        <div className="dt-name">
+                          {t.priority === "high" && <span className="prio-badge"><IconFlag />High priority</span>}
+                          {t.name}
+                        </div>
+                        <div className="dt-meta">{t.area} · {t.trade || "—"}</div>
                       </div>
-                      <div className="dt-meta">{t.area} · {t.trade || "—"}</div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                  <MoreLink total={d.upcoming.length} to="/calendar" />
+                </>
               )}
             </section>
           </div>
@@ -253,20 +269,23 @@ export default function Dashboard() {
             {d.attention.length === 0 ? (
               <div className="panel-empty"><IconCheck />Nothing needs your attention right now.</div>
             ) : (
-              d.attention.map((t) => (
-                <div key={t.id} className="dt-row is-high">
-                  <div className="dt-main">
-                    <div className="dt-name">
-                      <span className="prio-badge"><IconFlag />Needs review</span>
-                      {t.name}
+              <>
+                {d.attention.slice(0, MAX_ROWS).map((t) => (
+                  <div key={t.id} className="dt-row is-high">
+                    <div className="dt-main">
+                      <div className="dt-name">
+                        <span className="prio-badge"><IconFlag />Needs review</span>
+                        {t.name}
+                      </div>
+                      <div className="dt-meta">{t.area} · due {fmtShort(dueDate(t))}</div>
                     </div>
-                    <div className="dt-meta">{t.area} · due {fmtShort(dueDate(t))}</div>
+                    <span className={`pill ${t.status === "in_progress" ? "pill-prog" : "pill-todo"}`}>
+                      {t.status === "in_progress" ? "In progress" : "Todo"}
+                    </span>
                   </div>
-                  <span className={`pill ${t.status === "in_progress" ? "pill-prog" : "pill-todo"}`}>
-                    {t.status === "in_progress" ? "In progress" : "Todo"}
-                  </span>
-                </div>
-              ))
+                ))}
+                <MoreLink total={d.attention.length} to="/tasks" />
+              </>
             )}
           </section>
         </div>
