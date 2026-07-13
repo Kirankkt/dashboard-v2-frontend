@@ -77,10 +77,10 @@ export default function Calendar() {
     const first = new Date(ym.y, ym.m, 1);
     const start = new Date(first);
     start.setDate(first.getDate() - first.getDay());
-    const cells: { iso: string; day: number; inMonth: boolean }[] = [];
+    const cells: { iso: string; day: number; inMonth: boolean; off: boolean }[] = [];
     const d = new Date(start);
     for (let i = 0; i < 42; i++) {
-      cells.push({ iso: isoOf(d), day: d.getDate(), inMonth: d.getMonth() === ym.m });
+      cells.push({ iso: isoOf(d), day: d.getDate(), inMonth: d.getMonth() === ym.m, off: d.getDay() === 0 });
       d.setDate(d.getDate() + 1);
     }
     return cells;
@@ -226,7 +226,7 @@ export default function Calendar() {
                     const dayTasks = byDay.get(c.iso) ?? [];
                     const extra = dayTasks.length - 3;
                     return (
-                      <div key={c.iso} className={`cal-cell ${c.inMonth ? "" : "dim"} ${c.iso === today ? "today" : ""}`}>
+                      <div key={c.iso} className={`cal-cell ${c.inMonth ? "" : "dim"} ${c.off ? "off" : ""} ${c.iso === today ? "today" : ""}`}>
                         <div className="cal-cell-top">
                           {canEdit && (
                             <button

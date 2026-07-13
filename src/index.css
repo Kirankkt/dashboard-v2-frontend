@@ -375,6 +375,8 @@ svg { display: block; }
 .cal-grid .cal-cell:nth-child(-n + 7) { border-top: 0; }
 .cal-cell.dim { background: color-mix(in srgb, var(--surface-2) 55%, var(--surface)); }
 .cal-cell.dim .cal-daynum { opacity: .55; }
+.cal-cell.off { background: repeating-linear-gradient(-45deg, transparent 0 7px, color-mix(in srgb, var(--text-subtle) 9%, transparent) 7px 8px), color-mix(in srgb, var(--surface-2) 45%, var(--surface)); }
+.cal-cell.off .cal-daynum { color: var(--text-subtle); }
 .cal-cell.today { background: color-mix(in srgb, var(--accent-weak) 40%, var(--surface)); }
 .cal-cell-top { display: flex; align-items: center; justify-content: flex-end; gap: 4px; min-height: 22px; }
 .cal-daynum { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; }
