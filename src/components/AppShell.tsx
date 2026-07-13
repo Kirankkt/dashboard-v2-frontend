@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { unreadCount } from "../lib/messages";
 import { Menu } from "./Menu";
 import { ThemeToggle } from "./ThemeToggle";
 import {
@@ -30,11 +31,11 @@ const NAV = [
   { to: "/", label: "Dashboard", icon: <IconDashboard /> },
   { to: "/tasks", label: "Tasks", icon: <IconTasks /> },
   { to: "/calendar", label: "Calendar", icon: <IconCalendar /> },
+  { to: "/purchases", label: "Buying & Selling", icon: <IconCart /> },
+  { to: "/messages", label: "Conversations", icon: <IconChat /> },
 ];
 
 const SOON = [
-  { label: "Buying & Selling", icon: <IconCart /> },
-  { label: "Conversations", icon: <IconChat /> },
   { label: "Settings", icon: <IconSettings /> },
 ];
 
@@ -44,15 +45,31 @@ interface Props {
   title: string;
   titleIcon?: ReactNode;
   actions?: ReactNode;
+  /** Lock the page to the viewport height (content scrolls internally, e.g. chat). */
+  fill?: boolean;
   children: ReactNode;
 }
 
-export function AppShell({ title, titleIcon, actions, children }: Props) {
-  const { user, logout } = useAuth();
+export function AppShell({ title, titleIcon, actions, fill, children }: Props) {
+  const { user, logout, token } = useAuth();
   const [open, setOpen] = useState<boolean>(() => {
     if (window.innerWidth <= 820) return false;
     return localStorage.getItem(SIDEBAR_KEY) !== "0";
   });
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    const poll = () => unreadCount(token).then((r) => { if (active) setUnread(r.unread); }).catch(() => {});
+    poll();
+    const id = setInterval(poll, 30000);
+    window.addEventListener("messages-read", poll);
+    return () => {
+      active = false;
+      clearInterval(id);
+      window.removeEventListener("messages-read", poll);
+    };
+  }, [token]);
 
   function toggle() {
     setOpen((v) => {
@@ -96,6 +113,7 @@ export function AppShell({ title, titleIcon, actions, children }: Props) {
               >
                 {item.icon}
                 <span>{item.label}</span>
+                {item.to === "/messages" && unread > 0 && <b className="nav-badge">{unread > 99 ? "99+" : unread}</b>}
               </NavLink>
             ))}
           </div>
@@ -147,7 +165,7 @@ export function AppShell({ title, titleIcon, actions, children }: Props) {
         </div>
       </nav>
 
-      <div className="app-main">
+      <div className={`app-main ${fill ? "app-main-fill" : ""}`}>
         <header className="app-top">
           <div className="app-title">{titleIcon}{title}</div>
           <div className="spacer" />

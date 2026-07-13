@@ -147,7 +147,7 @@ export default function Tasks() {
           </div>
         ) : (
           <div className="tbl-scroll">
-            <table className="tbl">
+            <table className="tbl tbl-cards">
               <thead>
                 <tr>
                   <th>Task</th><th>Area</th><th>Crew</th><th>Progress</th><th>Dates</th><th>Status</th>{canEdit && <th />}
@@ -156,26 +156,26 @@ export default function Tasks() {
               <tbody>
                 {visible.map((t) => (
                   <tr key={t.id}>
-                    <td>
+                    <td data-label="Task">
                       <div className="t-name">
                         {t.priority === "high" && <span className="prio-badge"><IconFlag />High</span>}
                         {t.name}
                       </div>
                       <div className="t-sub">{t.trade || "—"}</div>
                     </td>
-                    <td>{t.area}</td>
-                    <td className="num">{t.workers} · {t.hours}h</td>
-                    <td style={{ minWidth: 120 }}>
+                    <td data-label="Area">{t.area}</td>
+                    <td data-label="Crew" className="num">{t.workers} · {t.hours}h</td>
+                    <td data-label="Progress" style={{ minWidth: 120 }}>
                       <div className={`progress ${t.progress >= 100 ? "is-done" : ""}`}><span style={{ width: `${t.progress}%` }} /></div>
                     </td>
-                    <td className="num">
+                    <td data-label="Dates" className="num">
                       {fmtDate(t.start_date)}
                       {t.end_date && t.end_date !== t.start_date ? ` → ${fmtDate(t.end_date)}` : ""}
                       {isOverdue(t) && <span style={{ color: "var(--danger)", marginLeft: 6 }} title="Overdue">!</span>}
                     </td>
-                    <td><StatusControl value={t.status} editable={!!canEdit} onChange={(s) => changeStatus(t, s)} /></td>
+                    <td data-label="Status"><StatusControl value={t.status} editable={!!canEdit} onChange={(s) => changeStatus(t, s)} /></td>
                     {canEdit && (
-                      <td>
+                      <td className="td-actions">
                         <Menu triggerClassName="row-more" triggerLabel="Row actions" trigger={<IconMore />}>
                           {(close) => (
                             <>

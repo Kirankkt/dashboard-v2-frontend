@@ -46,7 +46,8 @@ export default function Calendar() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<View>("month");
+  // Phones default to the agenda — the month grid needs horizontal scroll there.
+  const [view, setView] = useState<View>(() => (window.innerWidth <= 700 ? "list" : "month"));
   const [query, setQuery] = useState("");
   const now = new Date();
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() });
