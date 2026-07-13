@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
 import { Menu } from "../components/Menu";
 import { StatusControl } from "../components/StatusControl";
@@ -9,7 +10,8 @@ import { listTasks, createTask, updateTask, deleteTask, rolloverTasks } from "..
 import type { Task, TaskStatus, TaskInput } from "../lib/tasks";
 import type { ApiError } from "../lib/api";
 
-type Filter = "all" | TaskStatus;
+type Filter = "today" | "all" | TaskStatus;
+const FILTERS: Filter[] = ["today", "all", "todo", "in_progress", "done"];
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -22,6 +24,13 @@ function isOverdue(t: Task) {
   if (t.status === "done") return false;
   return (t.end_date ?? t.start_date) < today();
 }
+// Active today: unfinished and its date range spans today — matches the
+// dashboard's "Today" panel so the counts line up.
+function isToday(t: Task) {
+  if (t.status === "done") return false;
+  const t0 = today();
+  return t.start_date <= t0 && (t.end_date ?? t.start_date) >= t0;
+}
 
 export default function Tasks() {
   const { token, user } = useAuth();
@@ -30,7 +39,12 @@ export default function Tasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Filter>("all");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const raw = searchParams.get("filter") as Filter | null;
+  const filter: Filter = raw && FILTERS.includes(raw) ? raw : "today";
+  function setFilter(f: Filter) {
+    setSearchParams(f === "today" ? {} : { filter: f }, { replace: true });
+  }
   const [modal, setModal] = useState<{ open: boolean; task: Task | null }>({ open: false, task: null });
 
   async function load() {
@@ -49,19 +63,21 @@ export default function Tasks() {
   }, []);
 
   const counts = useMemo(() => {
-    const c = { all: tasks.length, todo: 0, in_progress: 0, done: 0, overdue: 0 };
+    const c = { all: tasks.length, today: 0, todo: 0, in_progress: 0, done: 0, overdue: 0 };
     for (const t of tasks) {
       c[t.status]++;
       if (isOverdue(t)) c.overdue++;
+      if (isToday(t)) c.today++;
     }
     return c;
   }, [tasks]);
   const donePct = counts.all ? Math.round((counts.done / counts.all) * 100) : 0;
 
-  const visible = useMemo(
-    () => (filter === "all" ? tasks : tasks.filter((t) => t.status === filter)),
-    [tasks, filter],
-  );
+  const visible = useMemo(() => {
+    if (filter === "all") return tasks;
+    if (filter === "today") return tasks.filter(isToday);
+    return tasks.filter((t) => t.status === filter);
+  }, [tasks, filter]);
 
   async function changeStatus(t: Task, status: TaskStatus) {
     try {
@@ -109,6 +125,7 @@ export default function Tasks() {
   ) : null;
 
   const chips: [Filter, string, number][] = [
+    ["today", "Today", counts.today],
     ["all", "All", counts.all],
     ["todo", "To do", counts.todo],
     ["in_progress", "In progress", counts.in_progress],
@@ -142,7 +159,7 @@ export default function Tasks() {
           <div className="empty">Loading tasks…</div>
         ) : visible.length === 0 ? (
           <div className="empty">
-            <h3>{filter === "all" ? "No tasks yet" : "Nothing here"}</h3>
+            <h3>{filter === "all" ? "No tasks yet" : filter === "today" ? "Nothing scheduled for today" : "Nothing here"}</h3>
             <p className="hint">{canEdit ? "Add your first task to start planning the build." : "Tasks will appear here once the contractor adds them."}</p>
           </div>
         ) : (

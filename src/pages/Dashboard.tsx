@@ -133,7 +133,7 @@ export default function Dashboard() {
             <section className="panel">
               <header className="panel-head">
                 <IconClock /><h2>Today</h2><span className="panel-count">{d.todayTasks.length}</span>
-                <Link className="panel-link" to="/tasks">View all</Link>
+                <Link className="panel-link" to="/tasks?filter=today">View all</Link>
               </header>
               {d.todayTasks.length === 0 ? (
                 <div className="panel-empty"><IconCheck />Nothing scheduled for today.</div>
@@ -151,7 +151,7 @@ export default function Dashboard() {
                       <StatusControl value={t.status} editable onChange={(s) => changeStatus(t, s)} />
                     </div>
                   ))}
-                  <MoreLink total={d.todayTasks.length} to="/tasks" />
+                  <MoreLink total={d.todayTasks.length} to="/tasks?filter=today" />
                 </>
               )}
             </section>
@@ -159,7 +159,7 @@ export default function Dashboard() {
             <section className="panel panel-danger">
               <header className="panel-head">
                 <IconAlert /><h2>Overdue</h2><span className="panel-count danger">{d.overdue.length}</span>
-                <Link className="panel-link" to="/tasks">View all</Link>
+                <Link className="panel-link" to="/tasks?filter=all">View all</Link>
               </header>
               {d.overdue.length === 0 ? (
                 <div className="panel-empty"><IconCheck />Nothing overdue. Great work.</div>
@@ -179,7 +179,7 @@ export default function Dashboard() {
                       <StatusControl value={t.status} editable onChange={(s) => changeStatus(t, s)} />
                     </div>
                   ))}
-                  <MoreLink total={d.overdue.length} to="/tasks" />
+                  <MoreLink total={d.overdue.length} to="/tasks?filter=all" />
                 </>
               )}
             </section>
@@ -284,7 +284,7 @@ export default function Dashboard() {
                     </span>
                   </div>
                 ))}
-                <MoreLink total={d.attention.length} to="/tasks" />
+                <MoreLink total={d.attention.length} to="/tasks?filter=all" />
               </>
             )}
           </section>
