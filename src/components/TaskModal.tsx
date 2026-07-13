@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import type { Task, TaskInput, TaskStatus } from "../lib/tasks";
+import type { Task, TaskInput, TaskPriority, TaskStatus } from "../lib/tasks";
 import { TRADES } from "../lib/tasks";
 import type { ApiError } from "../lib/api";
 import { IconClose, IconChevronDown } from "./icons";
@@ -11,19 +11,22 @@ function todayISO() {
 
 interface Props {
   initial: Task | null;
+  /** Prefill for the start date when creating (e.g. from a calendar cell). */
+  defaultDate?: string;
   onClose: () => void;
   onSubmit: (data: TaskInput) => Promise<void>;
 }
 
-export function TaskModal({ initial, onClose, onSubmit }: Props) {
+export function TaskModal({ initial, defaultDate, onClose, onSubmit }: Props) {
   const [name, setName] = useState(initial?.name ?? "");
   const [area, setArea] = useState(initial?.area ?? "");
   const [trade, setTrade] = useState(initial?.trade || TRADES[0]);
   const [workers, setWorkers] = useState(String(initial?.workers ?? 1));
   const [hours, setHours] = useState(String(initial?.hours ?? 8));
-  const [startDate, setStartDate] = useState(initial?.start_date ?? todayISO());
+  const [startDate, setStartDate] = useState(initial?.start_date ?? defaultDate ?? todayISO());
   const [endDate, setEndDate] = useState(initial?.end_date ?? "");
   const [status, setStatus] = useState<TaskStatus>(initial?.status ?? "todo");
+  const [priority, setPriority] = useState<TaskPriority>(initial?.priority ?? "normal");
   const [progress, setProgress] = useState(String(initial?.progress ?? 0));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -42,6 +45,7 @@ export function TaskModal({ initial, onClose, onSubmit }: Props) {
         start_date: startDate,
         end_date: endDate || null,
         status,
+        priority,
         progress: Math.max(0, Math.min(100, Number(progress) || 0)),
       });
     } catch (err) {
@@ -87,6 +91,16 @@ export function TaskModal({ initial, onClose, onSubmit }: Props) {
               <div className="field">
                 <label className="label" htmlFor="t-hours">Hours</label>
                 <input id="t-hours" className="input" type="number" min="0" step="0.5" value={hours} onChange={(e) => setHours(e.target.value)} />
+              </div>
+            </div>
+            <div className="field">
+              <label className="label" htmlFor="t-prio">Priority</label>
+              <div className="select-wrap">
+                <select id="t-prio" className="select" value={priority} onChange={(e) => setPriority(e.target.value as TaskPriority)}>
+                  <option value="normal">Normal</option>
+                  <option value="high">High — flag for attention</option>
+                </select>
+                <IconChevronDown />
               </div>
             </div>
             <div className="form-row">

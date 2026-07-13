@@ -4,7 +4,7 @@ import { Menu } from "../components/Menu";
 import { StatusControl } from "../components/StatusControl";
 import { TaskModal } from "../components/TaskModal";
 import { useAuth } from "../auth/AuthContext";
-import { IconTasks, IconPlus, IconRollover, IconMore, IconEdit, IconTrash } from "../components/icons";
+import { IconTasks, IconPlus, IconRollover, IconMore, IconEdit, IconTrash, IconFlag } from "../components/icons";
 import { listTasks, createTask, updateTask, deleteTask, rolloverTasks } from "../lib/tasks";
 import type { Task, TaskStatus, TaskInput } from "../lib/tasks";
 import type { ApiError } from "../lib/api";
@@ -156,7 +156,13 @@ export default function Tasks() {
               <tbody>
                 {visible.map((t) => (
                   <tr key={t.id}>
-                    <td><div className="t-name">{t.name}</div><div className="t-sub">{t.trade || "—"}</div></td>
+                    <td>
+                      <div className="t-name">
+                        {t.priority === "high" && <span className="prio-badge"><IconFlag />High</span>}
+                        {t.name}
+                      </div>
+                      <div className="t-sub">{t.trade || "—"}</div>
+                    </td>
                     <td>{t.area}</td>
                     <td className="num">{t.workers} · {t.hours}h</td>
                     <td style={{ minWidth: 120 }}>

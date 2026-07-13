@@ -52,6 +52,42 @@ export const IconClose = (p: P) => (
 export const IconChevronDown = (p: P) => (
   <svg {...base} strokeWidth={2} {...p}><path d="m6 9 6 6 6-6" /></svg>
 );
+export const IconDashboard = (p: P) => (
+  <svg {...base} {...p}><path d="M3 13h8V3H3z" /><path d="M13 21h8V11h-8z" /><path d="M13 3v4h8V3z" /><path d="M3 17v4h8v-4z" /></svg>
+);
+export const IconCalendar = (p: P) => (
+  <svg {...base} {...p}><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M8 2v4M16 2v4M3 9h18" /></svg>
+);
+export const IconCart = (p: P) => (
+  <svg {...base} {...p}><circle cx="9" cy="20" r="1.4" /><circle cx="17" cy="20" r="1.4" /><path d="M3 4h2l2.5 11.5a1 1 0 0 0 1 .8h8.7a1 1 0 0 0 1-.8L20 8H6" /></svg>
+);
+export const IconChat = (p: P) => (
+  <svg {...base} {...p}><path d="M21 12a8 8 0 0 1-8 8H4l1.6-3.2A8 8 0 1 1 21 12z" /></svg>
+);
+export const IconChevronLeft = (p: P) => (
+  <svg {...base} strokeWidth={2} {...p}><path d="m15 6-6 6 6 6" /></svg>
+);
+export const IconChevronRight = (p: P) => (
+  <svg {...base} strokeWidth={2} {...p}><path d="m9 6 6 6-6 6" /></svg>
+);
+export const IconSearch = (p: P) => (
+  <svg {...base} {...p}><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+);
+export const IconSidebar = (p: P) => (
+  <svg {...base} {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /></svg>
+);
+export const IconFlag = (p: P) => (
+  <svg {...base} {...p}><path d="M4 21V4" /><path d="M4 4h11l-1.5 4L15 12H4" /></svg>
+);
+export const IconClock = (p: P) => (
+  <svg {...base} {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+);
+export const IconAlert = (p: P) => (
+  <svg {...base} {...p}><path d="M12 3 2.5 20h19z" /><path d="M12 10v4M12 17.5h.01" /></svg>
+);
+export const IconCheck = (p: P) => (
+  <svg {...base} strokeWidth={2.2} {...p}><path d="m4 12.5 5 5L20 6.5" /></svg>
+);
 export const IconSun = (p: P) => (
   <svg {...base} {...p}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
 );

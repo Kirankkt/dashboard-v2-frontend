@@ -1,6 +1,7 @@
 import { api } from "./api";
 
 export type TaskStatus = "todo" | "in_progress" | "done";
+export type TaskPriority = "normal" | "high";
 
 export interface Task {
   id: number;
@@ -13,6 +14,7 @@ export interface Task {
   start_date: string;
   end_date: string | null;
   status: TaskStatus;
+  priority: TaskPriority;
   progress: number;
   updated_by: number | null;
   created_at: string;
@@ -36,6 +38,7 @@ export interface TaskInput {
   start_date: string;
   end_date: string | null;
   status: TaskStatus;
+  priority: TaskPriority;
   progress: number;
 }
 
