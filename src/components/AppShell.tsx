@@ -9,6 +9,7 @@ import {
   IconDashboard,
   IconTasks,
   IconCalendar,
+  IconGantt,
   IconCart,
   IconChat,
   IconSettings,
@@ -31,6 +32,7 @@ const NAV = [
   { to: "/", label: "Dashboard", icon: <IconDashboard /> },
   { to: "/tasks", label: "Tasks", icon: <IconTasks /> },
   { to: "/calendar", label: "Calendar", icon: <IconCalendar /> },
+  { to: "/gantt", label: "Gantt", icon: <IconGantt /> },
   { to: "/purchases", label: "Buying & Selling", icon: <IconCart /> },
   { to: "/messages", label: "Conversations", icon: <IconChat /> },
 ];
@@ -47,10 +49,12 @@ interface Props {
   actions?: ReactNode;
   /** Lock the page to the viewport height (content scrolls internally, e.g. chat). */
   fill?: boolean;
+  /** Let the content use the full width (e.g. the Gantt timeline). */
+  wide?: boolean;
   children: ReactNode;
 }
 
-export function AppShell({ title, titleIcon, actions, fill, children }: Props) {
+export function AppShell({ title, titleIcon, actions, fill, wide, children }: Props) {
   const { user, logout, token } = useAuth();
   const [open, setOpen] = useState<boolean>(() => {
     if (window.innerWidth <= 820) return false;
@@ -174,7 +178,7 @@ export function AppShell({ title, titleIcon, actions, fill, children }: Props) {
           {actions}
         </header>
         <div className="app-body">
-          <div className="app-body-inner">{children}</div>
+          <div className={`app-body-inner ${wide ? "app-body-wide" : ""}`}>{children}</div>
         </div>
       </div>
     </div>

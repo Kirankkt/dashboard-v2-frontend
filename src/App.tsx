@@ -3,6 +3,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Tasks from "./pages/Tasks";
 import Calendar from "./pages/Calendar";
+import Gantt from "./pages/Gantt";
 import Purchases from "./pages/Purchases";
 import Messages from "./pages/Messages";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -32,6 +33,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Calendar />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/gantt"
+        element={
+          <ProtectedRoute>
+            <Gantt />
           </ProtectedRoute>
         }
       />

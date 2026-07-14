@@ -19,6 +19,9 @@ export const IconGrid = (p: P) => (
 export const IconChart = (p: P) => (
   <svg {...base} {...p}><path d="M3 3v18h18" /><path d="M7 14l3-4 3 2 4-6" /></svg>
 );
+export const IconGantt = (p: P) => (
+  <svg {...base} {...p}><path strokeWidth={2.6} d="M3.5 5.5h8M7.5 12h9M12.5 18.5h8" /></svg>
+);
 export const IconCrew = (p: P) => (
   <svg {...base} {...p}><circle cx="9" cy="8" r="3" /><path d="M15 11a3 3 0 1 0-2-5.2" /><path d="M3 20c0-3 2.7-5 6-5s6 2 6 5" /><path d="M17 15c2.5.4 4 2.3 4 5" /></svg>
 );
