@@ -79,7 +79,8 @@ type Hint =
 
 export default function Gantt() {
   const { token, user } = useAuth();
-  const canEdit = user?.role === "contractor";
+  // Both roles reschedule from here; the API limits the client to these fields.
+  const canEdit = !!user;
   const today = todayISO();
 
   const [tasks, setTasks] = useState<Task[]>([]);
