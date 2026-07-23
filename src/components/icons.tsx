@@ -76,6 +76,9 @@ export const IconChevronRight = (p: P) => (
 export const IconSearch = (p: P) => (
   <svg {...base} {...p}><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
 );
+export const IconFilter = (p: P) => (
+  <svg {...base} {...p}><path d="M3 5.5h18l-7 8v5.5l-4 2v-7.5z" /></svg>
+);
 export const IconSidebar = (p: P) => (
   <svg {...base} {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /></svg>
 );
