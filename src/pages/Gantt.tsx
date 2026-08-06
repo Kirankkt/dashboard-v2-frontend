@@ -17,6 +17,7 @@ import type { ApiError } from "../lib/api";
 
 const ZOOMS = [8, 14, 22, 34]; // px per day
 const DOW = ["S", "M", "T", "W", "T", "F", "S"];
+const PHONE = "(max-width: 700px)";
 const STATUSES = [
   { key: "todo", label: "To do" },
   { key: "in_progress", label: "In progress" },
@@ -77,16 +78,119 @@ type Hint =
   | { kind: "trade"; label: string; sub: string }
   | { kind: "task"; label: string; sub: string; task: Task };
 
+function useIsPhone() {
+  const [phone, setPhone] = useState(() => window.matchMedia(PHONE).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(PHONE);
+    const on = () => setPhone(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return phone;
+}
+
+/** Phone editor for the three fields the Gantt owns. Replaces the inline
+ *  cells, which are too small to hit on a touch screen. */
+function EditSheet({
+  task,
+  editable,
+  onClose,
+  onSave,
+}: {
+  task: Task;
+  editable: boolean;
+  onClose: () => void;
+  onSave: (body: Partial<TaskInput>) => void;
+}) {
+  const [name, setName] = useState(task.name);
+  const [start, setStart] = useState(task.start_date);
+  const [end, setEnd] = useState(task.end_date ?? "");
+  const [err, setErr] = useState<string | null>(null);
+
+  function save() {
+    const trimmed = name.trim();
+    if (!trimmed) return setErr("A task needs a name.");
+    if (!start || !saneDate(start)) return setErr("Pick a start date.");
+    if (end && !saneDate(end)) return setErr("That finish date doesn't look right.");
+    if (end && end < start) return setErr("Finish date can't be before the start date.");
+    const body: Partial<TaskInput> = {};
+    if (trimmed !== task.name) body.name = trimmed;
+    if (start !== task.start_date) body.start_date = start;
+    if ((end || null) !== task.end_date) body.end_date = end || null;
+    onSave(body);
+  }
+
+  return (
+    <div className="sheet" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="sheet-panel" role="dialog" aria-modal="true" aria-label="Task">
+        <div className="sheet-grab" />
+        <div className="sheet-head">
+          <span className={`ev-bar ${tradeCls(task.trade)}`} />
+          <div className="dt-main">
+            <div className="dt-name">{task.name}</div>
+            <div className="dt-meta">
+              {task.area} · {task.trade || "—"} · {task.workers}w · {task.hours}h · {task.progress}%
+            </div>
+          </div>
+        </div>
+        <div className="sheet-body sheet-form">
+          {err && <div className="error-banner">{err}</div>}
+          {editable ? (
+            <>
+              <label className="field">
+                <span className="label">Task name</span>
+                <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+              </label>
+              <div className="form-row">
+                <label className="field">
+                  <span className="label">Start</span>
+                  <input type="date" className="input" value={start} onChange={(e) => setStart(e.target.value)} />
+                </label>
+                <label className="field">
+                  <span className="label">Finish</span>
+                  <input type="date" className="input" value={end} min={start || undefined} onChange={(e) => setEnd(e.target.value)} />
+                </label>
+              </div>
+              <p className="hint">Leave the finish date empty for a single-day task.</p>
+            </>
+          ) : (
+            <p className="hint">
+              {fmtShort(task.start_date)} → {task.end_date ? fmtShort(task.end_date) : "—"}
+            </p>
+          )}
+        </div>
+        <div className="modal-foot">
+          <button className="btn btn-secondary" type="button" onClick={onClose}>
+            {editable ? "Cancel" : "Close"}
+          </button>
+          {editable && (
+            <button className="btn btn-primary" type="button" onClick={save}>
+              Save
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Gantt() {
   const { token, user } = useAuth();
   // Both roles reschedule from here; the API limits the client to these fields.
   const canEdit = !!user;
   const today = todayISO();
+  const isPhone = useIsPhone();
+  // On a phone the schedule is a list by default — a two-pane timeline leaves
+  // almost no room for the bars. Editing there happens in a sheet, not inline.
+  const [mobileView, setMobileView] = useState<"list" | "timeline">("list");
+  const asList = isPhone && mobileView === "list";
+  const inlineEdit = canEdit && !isPhone;
+  const [sheet, setSheet] = useState<Task | null>(null);
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dayW, setDayW] = useState(ZOOMS[2]);
+  const [dayW, setDayW] = useState(() => (window.matchMedia(PHONE).matches ? ZOOMS[1] : ZOOMS[2]));
   const [closed, setClosed] = useState<Set<string>>(new Set());
   // Bumping this remounts the editable rows, reverting inputs to server values.
   const [rev, setRev] = useState(0);
@@ -298,10 +402,11 @@ export default function Gantt() {
 
   useEffect(() => {
     if (loading || didInitScroll.current) return;
-    didInitScroll.current = true;
     const el = scrollRef.current;
-    if (el) el.scrollLeft = Math.max(0, (todayOff - 3) * dayW);
-  }, [loading, todayOff, dayW]);
+    if (!el) return; // list view has no timeline to centre yet
+    didInitScroll.current = true;
+    el.scrollLeft = Math.max(0, (todayOff - 3) * dayW);
+  }, [loading, todayOff, dayW, asList]);
 
   function scrollToToday() {
     scrollRef.current?.scrollTo({ left: Math.max(0, (todayOff - 3) * dayW), behavior: "smooth" });
@@ -331,9 +436,8 @@ export default function Gantt() {
   useEffect(() => {
     if (!jump) return;
     const el = scrollRef.current;
-    const row = el?.querySelector<HTMLElement>(
-      jump.id ? `[data-row="t${jump.id}"]` : `[data-row="g${CSS.escape(jump.area)}"]`,
-    );
+    const sel = jump.id ? `[data-row="t${jump.id}"]` : `[data-row="g${CSS.escape(jump.area)}"]`;
+    const row = (el ?? document).querySelector<HTMLElement>(sel);
     if (el && row) {
       const target = shown.find((t) => t.id === jump.id);
       el.scrollTo({
@@ -341,6 +445,9 @@ export default function Gantt() {
         left: target ? Math.max(0, (daysBetween(range.start, target.start_date) - 3) * dayW) : el.scrollLeft,
         behavior: "smooth",
       });
+    } else if (row) {
+      // List view scrolls the page, not an inner pane.
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
     }
     setJump(null);
   }, [jump, shown, range.start, dayW]);
@@ -435,6 +542,16 @@ export default function Gantt() {
       {error && <div className="error-banner">{error}</div>}
 
       <div className="gantt-bar">
+        {isPhone && (
+          <div className="chips g-viewtoggle" role="group" aria-label="View">
+            <button type="button" className="chip-btn" aria-pressed={asList} onClick={() => setMobileView("list")}>
+              List
+            </button>
+            <button type="button" className="chip-btn" aria-pressed={!asList} onClick={() => setMobileView("timeline")}>
+              Timeline
+            </button>
+          </div>
+        )}
         <div className="search-wrap g-search">
           <IconSearch />
           <input
@@ -606,22 +723,26 @@ export default function Gantt() {
           ))}
         </div>
 
-        <button className="btn btn-secondary" type="button" onClick={scrollToToday}>
-          Today
-        </button>
-        <div className="zoom" role="group" aria-label="Zoom">
-          <button type="button" onClick={() => zoom(-1)} disabled={dayW === ZOOMS[0]} aria-label="Zoom out">
-            −
-          </button>
-          <button
-            type="button"
-            onClick={() => zoom(1)}
-            disabled={dayW === ZOOMS[ZOOMS.length - 1]}
-            aria-label="Zoom in"
-          >
-            +
-          </button>
-        </div>
+        {!asList && (
+          <>
+            <button className="btn btn-secondary" type="button" onClick={scrollToToday}>
+              Today
+            </button>
+            <div className="zoom" role="group" aria-label="Zoom">
+              <button type="button" onClick={() => zoom(-1)} disabled={dayW === ZOOMS[0]} aria-label="Zoom out">
+                −
+              </button>
+              <button
+                type="button"
+                onClick={() => zoom(1)}
+                disabled={dayW === ZOOMS[ZOOMS.length - 1]}
+                aria-label="Zoom in"
+              >
+                +
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="data-card">
@@ -641,8 +762,56 @@ export default function Gantt() {
               </button>
             </p>
           </div>
+        ) : asList ? (
+          <div className="sched">
+            {groups.map((g) => {
+              const isClosed = closed.has(g.area);
+              return (
+                <section key={g.area}>
+                  <button
+                    type="button"
+                    className="sched-head"
+                    data-row={`g${g.area}`}
+                    onClick={() => toggleGroup(g.area)}
+                    aria-expanded={!isClosed}
+                  >
+                    {isClosed ? <IconChevronRight /> : <IconChevronDown />}
+                    <b>{g.area}</b>
+                    <span className="panel-count">{g.tasks.length}</span>
+                    <em className="mono">{g.pct}%</em>
+                  </button>
+                  {!isClosed &&
+                    g.tasks.map((t) => {
+                      const late = t.status !== "done" && dueDate(t) < today;
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          data-row={`t${t.id}`}
+                          className={`sched-row ${tradeCls(t.trade)} ${hit === t.id ? "hit" : ""}`}
+                          onClick={() => setSheet(t)}
+                        >
+                          <span className="sched-rail" />
+                          <span className="sched-main">
+                            <span className={`sched-name ${t.status === "done" ? "is-done" : ""}`}>{t.name}</span>
+                            <span className="sched-meta">
+                              <b className="mono">{t.progress}%</b>
+                              <span className="mono">
+                                {fmtShort(t.start_date)}
+                                {t.end_date && t.end_date !== t.start_date ? ` → ${fmtShort(t.end_date)}` : ""}
+                              </span>
+                              {late && <em className="late">Overdue</em>}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                </section>
+              );
+            })}
+          </div>
         ) : (
-          <div className="g-scroll" ref={scrollRef}>
+          <div className={`g-scroll ${isPhone ? "g-mini" : ""}`} ref={scrollRef}>
             <div className="g-canvas">
               {/* One painted layer for the whole chart: day grid, weekends,
                   alternating months and the today marker. */}
@@ -735,7 +904,7 @@ export default function Gantt() {
                           >
                             <div className="g-left">
                               <span className={`g-swatch ${tradeCls(t.trade)}`} title={t.trade || "Other"} />
-                              {canEdit ? (
+                              {inlineEdit ? (
                                 <input
                                   className="g-cell g-name"
                                   defaultValue={t.name}
@@ -748,7 +917,7 @@ export default function Gantt() {
                                   {t.name}
                                 </span>
                               )}
-                              {canEdit ? (
+                              {inlineEdit ? (
                                 <input
                                   type="date"
                                   className="g-cell g-date"
@@ -761,7 +930,7 @@ export default function Gantt() {
                               ) : (
                                 <span className="g-cell g-date">{fmtShort(t.start_date)}</span>
                               )}
-                              {canEdit ? (
+                              {inlineEdit ? (
                                 <input
                                   type="date"
                                   className={`g-cell g-date ${t.end_date ? "" : "g-noend"}`}
@@ -811,6 +980,21 @@ export default function Gantt() {
           </div>
         )}
       </div>
+
+      {sheet && (
+        <EditSheet
+          task={sheet}
+          editable={canEdit}
+          onClose={() => setSheet(null)}
+          onSave={(body) => {
+            setSheet(null);
+            if (Object.keys(body).length) {
+              setError(null);
+              patch(sheet, body);
+            }
+          }}
+        />
+      )}
     </AppShell>
   );
 }

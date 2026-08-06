@@ -534,11 +534,87 @@ input.g-date.g-noend:hover { color: var(--text-subtle); }
   .g-legend { display: none; }
 }
 @media (max-width: 700px) {
-  .g-scroll { --g-left-w: 288px; }
+  .g-scroll { --g-left-w: 288px; max-height: calc(100dvh - 300px); min-height: 260px; }
   .g-left { grid-template-columns: 14px minmax(0, 1fr) 88px 88px; }
   .g-num { display: none; }
   input.g-date, .g-date { font-size: 0.6875rem; }
+  /* Timeline on a phone: name column only, so the bars actually get room. */
+  .g-scroll.g-mini { --g-left-w: 132px; }
+  .g-mini .g-left { grid-template-columns: 10px minmax(0, 1fr); }
+  .g-mini .g-left:not(.g-group-left) > *:nth-child(n + 3) { display: none; }
+  .g-mini .g-group-left .panel-count { display: none; } /* the area name needs the room */
+  .g-viewtoggle { order: -1; }
+  .gantt-bar .spacer { display: none; } /* stop Today/zoom wrapping onto their own rows */
+  .gantt-bar .btn { padding: 9px 11px; } /* fit the controls on one row, leaving the chart room */
 }
+
+/* ---- gantt: phone schedule list ---- */
+.sched { display: flex; flex-direction: column; }
+.sched-head {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 11px 14px;
+  border: 0; border-top: 1px solid var(--border); background: var(--surface-2);
+  font-family: var(--font-sans); text-align: left; cursor: pointer;
+}
+.sched section:first-child .sched-head { border-top: 0; }
+.sched-head svg { width: 15px; height: 15px; color: var(--text-subtle); flex-shrink: 0; }
+.sched-head b { font-size: 0.875rem; font-weight: 650; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sched-head em { margin-left: auto; font-style: normal; font-size: 0.75rem; color: var(--text-muted); }
+.sched-row {
+  display: flex; align-items: stretch; gap: 11px; width: 100%; min-height: 52px;
+  padding: 9px 14px 9px 0; border: 0; border-top: 1px solid var(--border);
+  background: transparent; font-family: var(--font-sans); text-align: left; cursor: pointer;
+}
+.sched-row:active { background: var(--surface-2); }
+.sched-rail { width: 3px; flex-shrink: 0; border-radius: 0 2px 2px 0; background: var(--ev); }
+.sched-main { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+.sched-name { font-size: 0.875rem; font-weight: 550; color: var(--text); overflow-wrap: anywhere; }
+.sched-name.is-done { color: var(--text-muted); text-decoration: line-through; }
+.sched-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: 0.75rem; color: var(--text-subtle); }
+.sched-meta b { color: var(--text-muted); font-weight: 600; }
+.sched-meta em { font-style: normal; font-size: 0.625rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.sched-row.hit { animation: g-flash 2.2s ease; }
+
+/* ---- bottom sheet (phones) ---- */
+.sheet { position: fixed; inset: 0; z-index: 60; background: rgba(8,14,26,.5); display: flex; align-items: flex-end; }
+.sheet-panel {
+  width: 100%; max-height: 88dvh; display: flex; flex-direction: column;
+  background: var(--surface); border-top: 1px solid var(--border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0; box-shadow: var(--shadow-lg);
+  padding-bottom: env(safe-area-inset-bottom);
+  animation: sheet-up .18s ease-out;
+}
+@keyframes sheet-up { from { transform: translateY(100%); } }
+.sheet-grab { width: 36px; height: 4px; flex-shrink: 0; margin: 8px auto 0; border-radius: 2px; background: var(--border-strong); }
+.sheet-head { display: flex; gap: 11px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.sheet-body { padding: 8px; overflow-y: auto; }
+.sheet-form { display: flex; flex-direction: column; gap: 14px; padding: 16px; }
+.sheet-item {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 10px 12px;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text);
+  font-family: var(--font-sans); font-size: 0.9375rem; font-weight: 500; text-decoration: none; cursor: pointer;
+}
+.sheet-item svg { width: 20px; height: 20px; flex-shrink: 0; color: var(--text-muted); }
+.sheet-item:active { background: var(--surface-2); }
+.sheet-item.active { background: var(--accent-weak); color: var(--accent); font-weight: 600; }
+.sheet-item.active svg { color: var(--accent); }
+.sheet-item.soon { color: var(--text-subtle); }
+.sheet-item.soon em { margin-left: auto; font-style: normal; font-size: 0.5625rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-subtle); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 2px 8px; }
+.sheet-item.danger { color: var(--danger); }
+.sheet-item.danger svg { color: var(--danger); }
+.sheet-account { display: flex; align-items: center; gap: 12px; padding: 8px 12px 12px; }
+.sheet-account .side-acc-meta i { font-family: var(--font-mono); }
+
+/* ---- bottom tab bar (phones) ---- */
+.tabbar { display: none; }
+.tab {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  min-height: 56px; padding: 6px 2px; border: 0; background: transparent; color: var(--text-subtle);
+  font-family: var(--font-sans); font-size: 0.625rem; font-weight: 550; text-decoration: none; cursor: pointer;
+}
+.tab svg { width: 21px; height: 21px; }
+.tab.active { color: var(--accent); }
+.tab:active { background: var(--surface-2); }
+.tab-dot { position: absolute; top: 8px; left: 50%; margin-left: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 
 /* ---- agenda (calendar list view) ---- */
 .agenda { display: flex; flex-direction: column; }
@@ -612,11 +688,36 @@ input.g-date.g-noend:hover { color: var(--text-subtle); }
   .tbl-cards tbody tr:hover td { background: transparent; }
 }
 
+/* ---- phones: bottom tab bar replaces the sidebar ---- */
+@media (max-width: 700px) {
+  .side { display: none; }
+  .tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+    background: var(--surface); border-top: 1px solid var(--border);
+    box-shadow: 0 -2px 10px -6px rgba(15,27,45,.35);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  /* keep the last row of content clear of the bar */
+  .app-body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .app-main-fill { height: 100dvh; }
+
+  /* touch targets */
+  .row-more { width: 38px; height: 38px; }
+  .chip-btn { padding: 9px 12px; }
+  .g-tag { padding: 8px 12px; }
+  .g-check { padding: 8px 7px; }
+  .ev { padding: 4px 6px 4px 5px; }
+  .zoom button { width: 40px; height: 40px; }
+  .cal-cell { min-height: 92px; }
+}
+
 /* ---- small-screen fixes ---- */
 @media (max-width: 560px) {
-  .app-top { padding: 12px 14px; gap: 8px; }
+  .app-top { padding: 12px 14px; gap: 8px; flex-wrap: wrap; }
   .app-top > .icon-btn[aria-label="Notifications"] { display: none; }
-  .app-body { padding: 14px; }
+  /* longhand: a `padding` shorthand here would clobber the tab-bar clearance above */
+  .app-body { padding-top: 14px; padding-inline: 14px; }
   .btn { padding: 10px 12px; }
   .form-row { grid-template-columns: 1fr; }
   .dash-hello h1 { font-size: 1.2rem; }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { unreadCount } from "../lib/messages";
 import { Menu } from "./Menu";
@@ -16,6 +16,7 @@ import {
   IconSidebar,
   IconBell,
   IconLogout,
+  IconMore,
 } from "./icons";
 
 function initials(name?: string) {
@@ -37,6 +38,17 @@ const NAV = [
   { to: "/messages", label: "Conversations", icon: <IconChat /> },
 ];
 
+// Phones get a bottom tab bar instead of the sidebar: four destinations plus a
+// "More" sheet holding the rest. Shorter labels — a tab is ~78px wide.
+const TABS = [
+  { to: "/", label: "Home", icon: <IconDashboard /> },
+  { to: "/tasks", label: "Tasks", icon: <IconTasks /> },
+  { to: "/calendar", label: "Calendar", icon: <IconCalendar /> },
+  { to: "/gantt", label: "Gantt", icon: <IconGantt /> },
+];
+const TAB_PATHS = new Set(TABS.map((t) => t.to));
+const MORE = NAV.filter((item) => !TAB_PATHS.has(item.to));
+
 const SOON = [
   { label: "Settings", icon: <IconSettings /> },
 ];
@@ -56,11 +68,13 @@ interface Props {
 
 export function AppShell({ title, titleIcon, actions, fill, wide, children }: Props) {
   const { user, logout, token } = useAuth();
+  const { pathname } = useLocation();
   const [open, setOpen] = useState<boolean>(() => {
     if (window.innerWidth <= 820) return false;
     return localStorage.getItem(SIDEBAR_KEY) !== "0";
   });
   const [unread, setUnread] = useState(0);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -181,6 +195,71 @@ export function AppShell({ title, titleIcon, actions, fill, wide, children }: Pr
           <div className={`app-body-inner ${wide ? "app-body-wide" : ""}`}>{children}</div>
         </div>
       </div>
+
+      <nav className="tabbar" aria-label="Primary">
+        {TABS.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === "/"}
+            className={({ isActive }) => `tab ${isActive ? "active" : ""}`}
+          >
+            {item.icon}
+            <span>{item.label}</span>
+          </NavLink>
+        ))}
+        <button
+          type="button"
+          className={`tab ${MORE.some((m) => m.to === pathname) ? "active" : ""}`}
+          onClick={() => setMoreOpen(true)}
+          aria-expanded={moreOpen}
+        >
+          <IconMore />
+          <span>More</span>
+          {unread > 0 && <i className="tab-dot" />}
+        </button>
+      </nav>
+
+      {moreOpen && (
+        <div className="sheet" onMouseDown={(e) => { if (e.target === e.currentTarget) setMoreOpen(false); }}>
+          <div className="sheet-panel" role="dialog" aria-modal="true" aria-label="More">
+            <div className="sheet-grab" />
+            <div className="sheet-body">
+              {MORE.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) => `sheet-item ${isActive ? "active" : ""}`}
+                  onClick={() => setMoreOpen(false)}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                  {item.to === "/messages" && unread > 0 && <b className="nav-badge">{unread > 99 ? "99+" : unread}</b>}
+                </NavLink>
+              ))}
+              {SOON.map((item) => (
+                <button key={item.label} type="button" className="sheet-item soon" disabled>
+                  {item.icon}
+                  <span>{item.label}</span>
+                  <em>Soon</em>
+                </button>
+              ))}
+              <div className="menu-sep" />
+              <div className="sheet-account">
+                <span className="side-avatar">{initials(user?.name)}</span>
+                <span className="side-acc-meta">
+                  <b>{user?.name}</b>
+                  <i>{user?.email}</i>
+                </span>
+              </div>
+              <button type="button" className="sheet-item danger" onClick={logout}>
+                <IconLogout />
+                <span>Log out</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
