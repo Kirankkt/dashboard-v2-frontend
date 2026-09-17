@@ -3,7 +3,7 @@ import { AppShell } from "../components/AppShell";
 import { Menu } from "../components/Menu";
 import { StatusControl } from "../components/StatusControl";
 import { TaskModal } from "../components/TaskModal";
-import { useAuth } from "../auth/AuthContext";
+import { useAuth, canEdit as canEditFor } from "../auth/AuthContext";
 import {
   IconCalendar,
   IconChevronLeft,
@@ -40,7 +40,7 @@ function* spanDays(t: Task): Generator<string> {
 
 export default function Calendar() {
   const { token, user } = useAuth();
-  const canEdit = user?.role === "contractor";
+  const canEdit = canEditFor(user);
   const today = todayISO();
 
   const [tasks, setTasks] = useState<Task[]>([]);

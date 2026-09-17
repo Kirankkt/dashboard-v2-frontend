@@ -52,6 +52,10 @@ export const getProject = (token: string | null) => api<Project>("/project", { t
 
 export const listTasks = (token: string | null) => api<Task[]>("/tasks", { token });
 
+/** Authoritative off-days (Sundays + holidays) in [from, to]. */
+export const getOffDays = (token: string | null, from: string, to: string) =>
+  api<string[]>(`/project/off-days?from=${from}&to=${to}`, { token });
+
 export const createTask = (token: string | null, body: TaskInput) =>
   api<Task>("/tasks", { method: "POST", body, token });
 

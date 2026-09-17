@@ -10,6 +10,7 @@ import {
   IconTasks,
   IconCalendar,
   IconGantt,
+  IconGrid,
   IconCart,
   IconChat,
   IconSettings,
@@ -32,6 +33,7 @@ function initials(name?: string) {
 const NAV = [
   { to: "/", label: "Dashboard", icon: <IconDashboard /> },
   { to: "/tasks", label: "Tasks", icon: <IconTasks /> },
+  { to: "/planner", label: "Planner", icon: <IconGrid /> },
   { to: "/calendar", label: "Calendar", icon: <IconCalendar /> },
   { to: "/gantt", label: "Gantt", icon: <IconGantt /> },
   { to: "/purchases", label: "Buying & Selling", icon: <IconCart /> },

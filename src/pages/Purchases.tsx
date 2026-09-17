@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import { Menu } from "../components/Menu";
 import { PurchaseModal } from "../components/PurchaseModal";
-import { useAuth } from "../auth/AuthContext";
+import { useAuth, canEdit as canEditFor } from "../auth/AuthContext";
 import { IconCart, IconPlus, IconMore, IconEdit, IconTrash, IconChevronDown } from "../components/icons";
 import {
   listPurchases, createPurchase, updatePurchase, deletePurchase,
@@ -35,7 +35,7 @@ function StatusMenu({ value, onChange }: { value: PurchaseStatus; onChange: (s: 
 
 export default function Purchases() {
   const { token, user } = useAuth();
-  const canDelete = user?.role === "contractor";
+  const canDelete = canEditFor(user);
 
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);

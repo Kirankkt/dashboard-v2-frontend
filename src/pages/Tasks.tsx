@@ -4,7 +4,7 @@ import { AppShell } from "../components/AppShell";
 import { Menu } from "../components/Menu";
 import { StatusControl } from "../components/StatusControl";
 import { TaskModal } from "../components/TaskModal";
-import { useAuth } from "../auth/AuthContext";
+import { useAuth, canEdit as canEditFor } from "../auth/AuthContext";
 import { IconTasks, IconPlus, IconRollover, IconMore, IconEdit, IconTrash, IconFlag } from "../components/icons";
 import { listTasks, createTask, updateTask, deleteTask, rolloverTasks } from "../lib/tasks";
 import type { Task, TaskStatus, TaskInput } from "../lib/tasks";
@@ -32,7 +32,7 @@ function isToday(t: Task) {
 
 export default function Tasks() {
   const { token, user } = useAuth();
-  const canEdit = user?.role === "contractor";
+  const canEdit = canEditFor(user);
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);

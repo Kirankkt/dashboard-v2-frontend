@@ -10,6 +10,14 @@ export interface User {
   email: string;
   role: Role;
   created_at: string;
+  /** Server-granted: may do everything the contractor can. */
+  full_access?: boolean;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+/** Whether the user may create, edit and delete — mirrors the API's rule. */
+export function canEdit(user: User | null): boolean {
+  return user?.role === "contractor" || !!user?.full_access;
 }
 
 type Status = "loading" | "authed" | "anon";
