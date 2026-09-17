@@ -8,27 +8,25 @@ import { useAuth } from "../auth/AuthContext";
 import { IconTasks, IconPlus, IconRollover, IconMore, IconEdit, IconTrash, IconFlag } from "../components/icons";
 import { listTasks, createTask, updateTask, deleteTask, rolloverTasks } from "../lib/tasks";
 import type { Task, TaskStatus, TaskInput } from "../lib/tasks";
+import { todayISO } from "../lib/dates";
 import type { ApiError } from "../lib/api";
 
 type Filter = "today" | "all" | TaskStatus;
 const FILTERS: Filter[] = ["today", "all", "todo", "in_progress", "done"];
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
   return new Date(iso + "T00:00:00").toLocaleDateString(undefined, { day: "2-digit", month: "short" });
 }
 function isOverdue(t: Task) {
   if (t.status === "done") return false;
-  return (t.end_date ?? t.start_date) < today();
+  return (t.end_date ?? t.start_date) < todayISO();
 }
 // Active today: unfinished and its date range spans today — matches the
 // dashboard's "Today" panel so the counts line up.
 function isToday(t: Task) {
   if (t.status === "done") return false;
-  const t0 = today();
+  const t0 = todayISO();
   return t.start_date <= t0 && (t.end_date ?? t.start_date) >= t0;
 }
 
@@ -109,7 +107,7 @@ export default function Tasks() {
   async function rollover() {
     if (!window.confirm("Move all unfinished tasks due today or earlier to the next working day?")) return;
     try {
-      const res = await rolloverTasks(token);
+      const res = await rolloverTasks(token, todayISO());
       await load();
       window.alert(`Moved ${res.moved} task(s) forward to ${fmtDate(res.moved_to)}.`);
     } catch (e) {

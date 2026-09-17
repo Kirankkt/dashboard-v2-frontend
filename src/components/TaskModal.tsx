@@ -3,10 +3,18 @@ import type { FormEvent } from "react";
 import type { Task, TaskInput, TaskPriority, TaskStatus } from "../lib/tasks";
 import { TRADES } from "../lib/tasks";
 import type { ApiError } from "../lib/api";
+import { todayISO } from "../lib/dates";
 import { IconClose, IconChevronDown } from "./icons";
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+// Mirrors the API, where progress decides status. Keeping the two fields in
+// step means the form never sends a status the server would override.
+function statusOf(progress: number): TaskStatus {
+  return progress >= 100 ? "done" : progress > 0 ? "in_progress" : "todo";
+}
+function progressFor(status: TaskStatus, progress: number): number {
+  if (status === "done") return 100;
+  if (status === "todo") return 0;
+  return progress > 0 && progress < 100 ? progress : 50;
 }
 
 interface Props {
@@ -118,7 +126,16 @@ export function TaskModal({ initial, defaultDate, onClose, onSubmit }: Props) {
                 <div className="field">
                   <label className="label" htmlFor="t-status">Status</label>
                   <div className="select-wrap">
-                    <select id="t-status" className="select" value={status} onChange={(e) => setStatus(e.target.value as TaskStatus)}>
+                    <select
+                      id="t-status"
+                      className="select"
+                      value={status}
+                      onChange={(e) => {
+                        const next = e.target.value as TaskStatus;
+                        setStatus(next);
+                        setProgress(String(progressFor(next, Number(progress) || 0)));
+                      }}
+                    >
                       <option value="todo">Todo</option>
                       <option value="in_progress">In progress</option>
                       <option value="done">Done</option>
@@ -128,7 +145,10 @@ export function TaskModal({ initial, defaultDate, onClose, onSubmit }: Props) {
                 </div>
                 <div className="field">
                   <label className="label" htmlFor="t-prog">Progress %</label>
-                  <input id="t-prog" className="input" type="number" min="0" max="100" value={progress} onChange={(e) => setProgress(e.target.value)} />
+                  <input id="t-prog" className="input" type="number" min="0" max="100" value={progress} onChange={(e) => {
+                    setProgress(e.target.value);
+                    setStatus(statusOf(Math.max(0, Math.min(100, Number(e.target.value) || 0))));
+                  }} />
                 </div>
               </div>
             )}
