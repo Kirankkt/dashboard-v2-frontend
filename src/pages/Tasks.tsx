@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
 import { Menu } from "../components/Menu";
@@ -6,13 +6,30 @@ import { StatusControl } from "../components/StatusControl";
 import { TaskModal } from "../components/TaskModal";
 import { useAuth, canEdit as canEditFor } from "../auth/AuthContext";
 import { IconTasks, IconPlus, IconRollover, IconMore, IconEdit, IconTrash, IconFlag } from "../components/icons";
-import { listTasks, createTask, updateTask, deleteTask, rolloverTasks } from "../lib/tasks";
+import { listTasks, createTask, updateTask, deleteTask } from "../lib/tasks";
 import type { Task, TaskStatus, TaskInput } from "../lib/tasks";
 import { todayISO } from "../lib/dates";
 import type { ApiError } from "../lib/api";
 
-type Filter = "today" | "all" | TaskStatus;
-const FILTERS: Filter[] = ["today", "all", "todo", "in_progress", "done"];
+type Filter = "today" | "all" | "overdue" | TaskStatus;
+const FILTERS: Filter[] = ["today", "all", "overdue", "todo", "in_progress", "done"];
+const UNDO_LIMIT = 20;
+
+/** What a task looked like before an edit, for the undo stack. */
+function inputOf(t: Task): TaskInput {
+  return {
+    area: t.area,
+    name: t.name,
+    trade: t.trade,
+    workers: t.workers,
+    hours: t.hours,
+    start_date: t.start_date,
+    end_date: t.end_date,
+    status: t.status,
+    priority: t.priority,
+    progress: t.progress,
+  };
+}
 
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
@@ -44,6 +61,24 @@ export default function Tasks() {
     setSearchParams(f === "today" ? {} : { filter: f }, { replace: true });
   }
   const [modal, setModal] = useState<{ open: boolean; task: Task | null }>({ open: false, task: null });
+  const undoRef = useRef<{ label: string; run: () => Promise<void> }[]>([]);
+  const [undo, setUndo] = useState<string | null>(null);
+
+  function pushUndo(label: string, run: () => Promise<void>) {
+    undoRef.current = [...undoRef.current, { label, run }].slice(-UNDO_LIMIT);
+    setUndo(label);
+  }
+  async function undoLast() {
+    const entry = undoRef.current.pop();
+    setUndo(undoRef.current[undoRef.current.length - 1]?.label ?? null);
+    if (!entry) return;
+    try {
+      await entry.run();
+    } catch (e) {
+      setError((e as ApiError)?.message ?? "Could not undo that — reloaded the list.");
+      load();
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -74,50 +109,62 @@ export default function Tasks() {
   const visible = useMemo(() => {
     if (filter === "all") return tasks;
     if (filter === "today") return tasks.filter(isToday);
+    if (filter === "overdue") return tasks.filter(isOverdue);
     return tasks.filter((t) => t.status === filter);
   }, [tasks, filter]);
 
-  async function changeStatus(t: Task, status: TaskStatus) {
+  const replace = (u: Task) => setTasks((prev) => prev.map((x) => (x.id === u.id ? u : x)));
+
+  async function changeStatus(t: Task, status: TaskStatus, progress?: number) {
     try {
-      const u = await updateTask(token, t.id, { status });
-      setTasks((prev) => prev.map((x) => (x.id === u.id ? u : x)));
+      // The picker sets a number; the server derives the status from it.
+      replace(await updateTask(token, t.id, progress === undefined ? { status } : { progress }));
+      pushUndo(`status of “${t.name}”`, async () => replace(await updateTask(token, t.id, { progress: t.progress })));
     } catch (e) {
       setError((e as ApiError)?.message ?? "Could not update status");
     }
   }
   async function submit(data: TaskInput) {
     if (modal.task) {
+      const before = inputOf(modal.task);
       const u = await updateTask(token, modal.task.id, data);
-      setTasks((prev) => prev.map((x) => (x.id === u.id ? u : x)));
+      replace(u);
+      pushUndo(`changes to “${u.name}”`, async () => replace(await updateTask(token, u.id, before)));
     } else {
       const created = await createTask(token, data);
       setTasks((prev) => [...prev, created]);
+      pushUndo(`adding “${created.name}”`, async () => {
+        await deleteTask(token, created.id);
+        setTasks((prev) => prev.filter((x) => x.id !== created.id));
+      });
     }
     setModal({ open: false, task: null });
   }
   async function remove(t: Task) {
-    if (!window.confirm(`Delete “${t.name}”? This can't be undone.`)) return;
+    if (!window.confirm(`Delete “${t.name}”?`)) return;
     try {
       await deleteTask(token, t.id);
       setTasks((prev) => prev.filter((x) => x.id !== t.id));
+      pushUndo(`deleting “${t.name}”`, async () => {
+        const back = await createTask(token, inputOf(t));
+        setTasks((prev) => [...prev, back]);
+      });
     } catch (e) {
       setError((e as ApiError)?.message ?? "Could not delete task");
-    }
-  }
-  async function rollover() {
-    if (!window.confirm("Move all unfinished tasks due today or earlier to the next working day?")) return;
-    try {
-      const res = await rolloverTasks(token, todayISO());
-      await load();
-      window.alert(`Moved ${res.moved} task(s) forward to ${fmtDate(res.moved_to)}.`);
-    } catch (e) {
-      setError((e as ApiError)?.message ?? "Could not roll over");
     }
   }
 
   const actions = canEdit ? (
     <>
-      <button className="btn btn-secondary" type="button" onClick={rollover}><IconRollover />Roll over</button>
+      <button
+        className="btn btn-secondary"
+        type="button"
+        onClick={undoLast}
+        disabled={!undo}
+        title={undo ? `Undo ${undo}` : "Nothing to undo"}
+      >
+        <IconRollover />Undo
+      </button>
       <button className="btn btn-primary" type="button" onClick={() => setModal({ open: true, task: null })}><IconPlus />Add task</button>
     </>
   ) : null;
@@ -125,6 +172,7 @@ export default function Tasks() {
   const chips: [Filter, string, number][] = [
     ["today", "Today", counts.today],
     ["all", "All", counts.all],
+    ["overdue", "Overdue", counts.overdue],
     ["todo", "To do", counts.todo],
     ["in_progress", "In progress", counts.in_progress],
     ["done", "Done", counts.done],
@@ -157,7 +205,15 @@ export default function Tasks() {
           <div className="empty">Loading tasks…</div>
         ) : visible.length === 0 ? (
           <div className="empty">
-            <h3>{filter === "all" ? "No tasks yet" : filter === "today" ? "Nothing scheduled for today" : "Nothing here"}</h3>
+            <h3>
+              {filter === "all"
+                ? "No tasks yet"
+                : filter === "today"
+                  ? "Nothing scheduled for today"
+                  : filter === "overdue"
+                    ? "Nothing is overdue"
+                    : "Nothing here"}
+            </h3>
             <p className="hint">{canEdit ? "Add your first task to start planning the build." : "Tasks will appear here once the contractor adds them."}</p>
           </div>
         ) : (
@@ -188,7 +244,7 @@ export default function Tasks() {
                       {t.end_date && t.end_date !== t.start_date ? ` → ${fmtDate(t.end_date)}` : ""}
                       {isOverdue(t) && <span style={{ color: "var(--danger)", marginLeft: 6 }} title="Overdue">!</span>}
                     </td>
-                    <td data-label="Status"><StatusControl value={t.status} editable={!!canEdit} onChange={(s) => changeStatus(t, s)} /></td>
+                    <td data-label="Status"><StatusControl value={t.status} progress={t.progress} name={t.name} editable={!!canEdit} onChange={(s, p) => changeStatus(t, s, p)} /></td>
                     {canEdit && (
                       <td className="td-actions">
                         <Menu triggerClassName="row-more" triggerLabel="Row actions" trigger={<IconMore />}>

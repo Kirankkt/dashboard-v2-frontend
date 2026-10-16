@@ -14,7 +14,7 @@ function statusOf(progress: number): TaskStatus {
 function progressFor(status: TaskStatus, progress: number): number {
   if (status === "done") return 100;
   if (status === "todo") return 0;
-  return progress > 0 && progress < 100 ? progress : 50;
+  return progress > 0 && progress < 100 ? progress : 10;
 }
 
 interface Props {

@@ -46,9 +46,10 @@ export default function Dashboard() {
       .finally(() => setLoading(false));
   }, [token]);
 
-  async function changeStatus(t: Task, status: TaskStatus) {
+  async function changeStatus(t: Task, status: TaskStatus, progress?: number) {
     try {
-      const u = await updateTask(token, t.id, { status });
+      // The progress picker sets a number; the server derives the status.
+      const u = await updateTask(token, t.id, progress === undefined ? { status } : { progress });
       setTasks((prev) => prev.map((x) => (x.id === u.id ? u : x)));
     } catch (e) {
       setError((e as ApiError)?.message ?? "Could not update status");
@@ -148,7 +149,7 @@ export default function Dashboard() {
                         </div>
                         <div className="dt-meta">{t.area} · {t.trade || "—"} · {t.workers}w · {t.hours}h</div>
                       </div>
-                      <StatusControl value={t.status} editable onChange={(s) => changeStatus(t, s)} />
+                      <StatusControl value={t.status} progress={t.progress} name={t.name} editable onChange={(s, p) => changeStatus(t, s, p)} />
                     </div>
                   ))}
                   <MoreLink total={d.todayTasks.length} to="/tasks?filter=today" />
@@ -159,7 +160,7 @@ export default function Dashboard() {
             <section className="panel panel-danger">
               <header className="panel-head">
                 <IconAlert /><h2>Overdue</h2><span className="panel-count danger">{d.overdue.length}</span>
-                <Link className="panel-link" to="/tasks?filter=all">View all</Link>
+                <Link className="panel-link" to="/tasks?filter=overdue">View all</Link>
               </header>
               {d.overdue.length === 0 ? (
                 <div className="panel-empty"><IconCheck />Nothing overdue. Great work.</div>
@@ -176,10 +177,10 @@ export default function Dashboard() {
                           {t.area} · due {fmtShort(dueDate(t))} · <span className="late">{daysLate(t, today)}d late</span>
                         </div>
                       </div>
-                      <StatusControl value={t.status} editable onChange={(s) => changeStatus(t, s)} />
+                      <StatusControl value={t.status} progress={t.progress} name={t.name} editable onChange={(s, p) => changeStatus(t, s, p)} />
                     </div>
                   ))}
-                  <MoreLink total={d.overdue.length} to="/tasks?filter=all" />
+                  <MoreLink total={d.overdue.length} to="/tasks?filter=overdue" />
                 </>
               )}
             </section>

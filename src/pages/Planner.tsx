@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, MouseEvent as RMouseEvent, PointerEvent as RPointerEvent } from "react";
+import type {
+  CSSProperties,
+  KeyboardEvent as RKeyboardEvent,
+  MouseEvent as RMouseEvent,
+  PointerEvent as RPointerEvent,
+} from "react";
 import { AppShell } from "../components/AppShell";
 import { TaskModal } from "../components/TaskModal";
 import { TaskEditor, QuickAdd, tradeCls } from "../components/PlannerEditor";
 import type { QuickTask } from "../components/PlannerEditor";
+import GridBody from "../components/PlannerGrid";
+import type { Day, Entry, GridRow } from "../components/PlannerGrid";
 import { useAuth, canEdit } from "../auth/AuthContext";
 import {
   IconGrid,
@@ -13,14 +20,14 @@ import {
   IconClose,
   IconPlus,
   IconFilter,
-  IconFlag,
   IconCheck,
   IconRollover,
   IconTrash,
 } from "../components/icons";
 import { listTasks, createTask, updateTask, deleteTask, getOffDays, TRADES } from "../lib/tasks";
 import type { Task, TaskInput, TaskStatus } from "../lib/tasks";
-import { todayISO, addDaysISO, dateOf, fmtDay } from "../lib/dates";
+import { todayISO, addDaysISO, dateOf } from "../lib/dates";
+import { useIsPhone } from "../lib/useIsPhone";
 import type { ApiError } from "../lib/api";
 
 const PHONE = "(max-width: 700px)";
@@ -57,7 +64,9 @@ const HOUSE_ORDER = [
 
 type Cell = { area: string; iso: string };
 type Target = Cell & { tone: "ok" | "no" | "idle"; tip: string };
-type Entry = { task: Task; cont: boolean };
+const NO_ENTRIES: Entry[] = [];
+const NO_IDS: Set<number> = new Set();
+const DROP_CLASSES = ["drop-ok", "drop-no", "drop-idle"];
 type Undo = { label: string; run: () => Promise<void> };
 type Drag = {
   ids: number[];
@@ -126,7 +135,7 @@ function applyLocal(t: Task, body: Partial<TaskInput>): Task {
   if ("status" in body && !("progress" in body)) {
     if (body.status === "done") next.progress = 100;
     else if (body.status === "todo") next.progress = 0;
-    else if (t.progress <= 0 || t.progress >= 100) next.progress = 50;
+    else if (t.progress <= 0 || t.progress >= 100) next.progress = 10;
   }
   next.progress = Math.max(0, Math.min(100, next.progress));
   next.status = next.progress >= 100 ? "done" : next.progress > 0 ? "in_progress" : "todo";
@@ -145,17 +154,6 @@ function inputOf(t: Task): TaskInput {
     priority: t.priority,
     progress: t.progress,
   };
-}
-
-function useIsPhone() {
-  const [phone, setPhone] = useState(() => window.matchMedia(PHONE).matches);
-  useEffect(() => {
-    const mq = window.matchMedia(PHONE);
-    const on = () => setPhone(mq.matches);
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, []);
-  return phone;
 }
 
 export default function Planner() {
@@ -188,6 +186,7 @@ export default function Planner() {
   const [colW, setColW] = useState(() => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(prefs.zoom) || 116)));
   const [zoomUi, setZoomUi] = useState({ tier: tierOf(colW), canIn: true, canOut: true });
   const [rangeOpen, setRangeOpen] = useState(false);
+  const [jumpOpen, setJumpOpen] = useState(false);
   const [rangeDraft, setRangeDraft] = useState({ from: "", to: "", err: "" });
   const [hideDone, setHideDone] = useState(prefs.hideDone);
   const [activeOnly, setActiveOnly] = useState(prefs.activeOnly);
@@ -195,6 +194,7 @@ export default function Planner() {
   const [offMap, setOffMap] = useState<{ key: string; days: Set<string> } | null>(null);
 
   const [query, setQuery] = useState("");
+  const [queryLive, setQueryLive] = useState("");
   const [fTrades, setFTrades] = useState<Set<string>>(new Set());
   const [fOpen, setFOpen] = useState(false);
   const [extraAreas, setExtraAreas] = useState<string[]>(() => readJSON(AREAS_KEY, { list: [] as string[] }).list);
@@ -208,15 +208,15 @@ export default function Planner() {
   const [modal, setModal] = useState(false);
 
   const [drag, setDrag] = useState<Drag | null>(null);
-  const [target, setTarget] = useState<Target | null>(null);
   const [edge, setEdge] = useState<-1 | 0 | 1>(0);
   const [undoCount, setUndoCount] = useState(0);
   const [toast, setToast] = useState<{ text: string; undo: boolean; n: number } | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const jumpRef = useRef<HTMLInputElement>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+  const dropRef = useRef<HTMLElement | null>(null);
   const pressRef = useRef<Press | null>(null);
   const dragRef = useRef<Drag | null>(null);
   const targetKey = useRef("");
@@ -256,7 +256,7 @@ export default function Planner() {
     }
   }, [extraAreas]);
 
-  const days = useMemo(
+  const days = useMemo<Day[]>(
     () =>
       Array.from({ length: len }, (_, i) => {
         const iso = addDaysISO(from, i);
@@ -290,7 +290,13 @@ export default function Planner() {
   );
 
   // ---------- derived grid ----------
-  const q = query.trim().toLowerCase();
+  // The grid rebuilds on `query`; the input shows `queryLive` so typing stays
+  // responsive on a phone.
+  useEffect(() => {
+    const id = window.setTimeout(() => setQuery(queryLive.trim().toLowerCase()), 160);
+    return () => window.clearTimeout(id);
+  }, [queryLive]);
+  const q = query;
   const byCell = useMemo(() => {
     const map = new Map<string, Entry[]>();
     for (const t of tasks) {
@@ -327,7 +333,7 @@ export default function Planner() {
     return [...set].sort((a, b) => areaRank(a) - areaRank(b) || a.localeCompare(b));
   }, [tasks, extraAreas]);
 
-  const rows = useMemo(() => {
+  const rows = useMemo<GridRow[]>(() => {
     const stats = new Map<string, { total: number; sum: number }>();
     for (const t of tasks) {
       const s = stats.get(t.area) ?? { total: 0, sum: 0 };
@@ -335,38 +341,39 @@ export default function Planner() {
       s.sum += t.progress;
       stats.set(t.area, s);
     }
-    return allAreas
-      .map((area) => {
-        let inView = 0;
-        let hits = 0;
-        for (const d of days) {
-          for (const e of byCell.get(`${area}|${d.iso}`) ?? []) {
-            inView++;
-            if (matches(e.task)) hits++;
-          }
-        }
-        const s = stats.get(area);
-        return {
-          area,
-          total: s?.total ?? 0,
-          pct: s ? Math.round(s.sum / s.total) : 0,
-          inView,
-          hits,
-          extra: !s,
-        };
-      })
-      .filter((r) => (q ? r.hits > 0 : !activeOnly || r.inView > 0 || r.extra));
+    const out: GridRow[] = [];
+    for (const area of allAreas) {
+      const cells: Entry[][] = [];
+      let inView = 0;
+      let hits = 0;
+      for (const d of days) {
+        const es = byCell.get(`${area}|${d.iso}`) ?? NO_ENTRIES;
+        cells.push(es);
+        inView += es.length;
+        for (const e of es) if (matches(e.task)) hits++;
+      }
+      const s = stats.get(area);
+      const extra = !s;
+      if (q ? hits === 0 : activeOnly && inView === 0 && !extra) continue;
+      out.push({
+        area,
+        total: s?.total ?? 0,
+        pct: s ? Math.round(s.sum / s.total) : 0,
+        extra,
+        cells,
+      });
+    }
+    return out;
   }, [allAreas, tasks, days, byCell, matches, q, activeOnly]);
 
   // Off-days with nothing on them shrink to a thin hatched column.
   const collapsed = useMemo(() => {
     const out = new Set<string>();
-    for (const d of days) {
-      if (!offSet.has(d.iso)) continue;
-      if (!rows.some((r) => byCell.has(`${r.area}|${d.iso}`))) out.add(d.iso);
-    }
+    days.forEach((d, i) => {
+      if (offSet.has(d.iso) && !rows.some((r) => r.cells[i].length)) out.add(d.iso);
+    });
     return out;
-  }, [days, offSet, rows, byCell]);
+  }, [days, offSet, rows]);
 
   // Columns are at least the zoom width; spare room is shared evenly. The grid
   // gets an explicit width so long task names can't stretch their column. Both
@@ -400,6 +407,7 @@ export default function Planner() {
   );
 
   // ---------- helpers ----------
+  const taskById = (id: string | undefined) => tasks.find((t) => String(t.id) === id);
   const replaceTask = useCallback((u: Task) => setTasks((prev) => prev.map((x) => (x.id === u.id ? u : x))), []);
 
   function flashIds(ids: number[]) {
@@ -471,6 +479,7 @@ export default function Planner() {
     setFrom((f) => mondayOf(f));
   }
   function openCustom() {
+    setJumpOpen(false);
     setRangeDraft({ from, to, err: "" });
     setRangeOpen((v) => !v);
   }
@@ -538,7 +547,9 @@ export default function Planner() {
     window.clearTimeout(zoomTimer.current);
     zoomTimer.current = window.setTimeout(() => setColW(Math.round(zoomRef.current)), 200);
   }
-  useLayoutEffect(syncZoom);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- measuring is cheap
+  // but not free: re-measure when the grid's width can actually have changed.
+  useLayoutEffect(syncZoom, [days.length, collapsed, colW, loading]);
   useEffect(() => {
     const sc = scrollRef.current;
     if (!sc) return;
@@ -570,10 +581,20 @@ export default function Planner() {
     [],
   );
 
-  // ---------- pan: drag empty grid space to scroll ----------
+  // ---------- one listener for the grid: press a card, or pan the view ----------
   function onGridDown(e: RPointerEvent<HTMLDivElement>) {
+    const el = e.target as HTMLElement;
+    if (!el.closest("button, input, select, a")) {
+      const card = el.closest<HTMLElement>("[data-tid]");
+      const cell = card?.closest<HTMLElement>("[data-cell]");
+      if (card && cell) {
+        const t = taskById(card.dataset.tid);
+        if (t) onCardDown(e, t, cell.dataset.iso!, card);
+        return;
+      }
+    }
     if (e.pointerType !== "mouse" || e.button !== 0) return;
-    if ((e.target as HTMLElement).closest(".pc, button, input, select, a")) return;
+    if (el.closest("button, input, select, a")) return;
     const sc = e.currentTarget;
     const start = { x: e.clientX, y: e.clientY, left: sc.scrollLeft, top: sc.scrollTop };
     let panning = false;
@@ -767,6 +788,7 @@ export default function Planner() {
     const existing = allAreas.find((a) => a.toLowerCase() === name.toLowerCase());
     if (!existing) setExtraAreas((prev) => [...prev, name]);
     setActiveOnly(false);
+    setQueryLive("");
     setQuery("");
   }
 
@@ -787,6 +809,24 @@ export default function Planner() {
     };
   }
 
+  /** Paint the hovered cell and the tip under the ghost by hand — going
+   * through React here would re-render the whole grid on every pointer move. */
+  function paintTarget(cellEl: HTMLElement | null, t: Target | null) {
+    const prev = dropRef.current;
+    if (prev && prev !== cellEl) prev.classList.remove(...DROP_CLASSES);
+    dropRef.current = cellEl;
+    if (cellEl) {
+      cellEl.classList.remove(...DROP_CLASSES);
+      if (t) cellEl.classList.add(`drop-${t.tone}`);
+    }
+    const tip = tipRef.current;
+    if (tip) {
+      tip.textContent = t?.tip ?? "";
+      tip.className = `pl-ghost-tip ${t?.tone ?? ""}`;
+      tip.hidden = !t;
+    }
+  }
+
   function retarget() {
     const d = dragRef.current;
     if (!d) return;
@@ -796,10 +836,11 @@ export default function Planner() {
     const cellEl = cellAt(d.x) ?? cellAt(d.x - 24);
     const next = cellEl ? evaluate(d, { area: cellEl.dataset.area!, iso: cellEl.dataset.iso! }) : null;
     const key = next ? `${next.area}|${next.iso}|${next.tip}` : "";
-    if (key !== targetKey.current) {
+    // The cell check also repaints after the grid re-renders mid-drag.
+    if (key !== targetKey.current || (cellEl ?? null) !== dropRef.current) {
       targetKey.current = key;
       d.target = next;
-      setTarget(next);
+      paintTarget(cellEl ?? null, next);
     }
   }
 
@@ -840,9 +881,9 @@ export default function Planner() {
     pressRef.current = null;
     dragRef.current = null;
     targetKey.current = "";
+    paintTarget(null, null);
     document.body.classList.remove("pl-grabbing");
     setDrag(null);
-    setTarget(null);
     setEdge(0);
   }
 
@@ -856,7 +897,7 @@ export default function Planner() {
     else moveTasks(group, delta, area);
   }
 
-  function onCardDown(e: RPointerEvent<HTMLElement>, t: Task, iso: string) {
+  function onCardDown(e: RPointerEvent<HTMLElement>, t: Task, iso: string, el: HTMLElement) {
     if (e.button !== 0 || !user || e.metaKey || e.ctrlKey || e.shiftKey) return;
     pressRef.current?.detach();
     const press: Press = {
@@ -864,7 +905,7 @@ export default function Planner() {
       y: e.clientY,
       task: t,
       iso,
-      el: e.currentTarget,
+      el,
       touch: e.pointerType !== "mouse",
       timer: null,
       detach: () => {},
@@ -994,8 +1035,7 @@ export default function Planner() {
   live.current = { tasks, selected, fullEdit, commitDrop, retarget, undoLast, deleteTasks, applyZoom, syncZoom };
 
   // ---------- selection, clicks, keyboard ----------
-  function onCardClick(e: RMouseEvent<HTMLElement>, t: Task) {
-    if (Date.now() < suppressClickUntil.current) return;
+  function onCardClick(e: RMouseEvent<HTMLElement>, t: Task, el: HTMLElement) {
     if (e.metaKey || e.ctrlKey || e.shiftKey) {
       setSelected((prev) => {
         const next = new Set(prev);
@@ -1006,7 +1046,7 @@ export default function Planner() {
       return;
     }
     setSelected(new Set());
-    setEditor({ id: t.id, rect: e.currentTarget.getBoundingClientRect() });
+    setEditor({ id: t.id, rect: el.getBoundingClientRect() });
   }
 
   function openComposer(cell: Cell, el: HTMLElement) {
@@ -1045,135 +1085,77 @@ export default function Planner() {
   const mod = IS_MAC ? "⌘" : "Ctrl";
   const alt = IS_MAC ? "⌥" : "Alt";
 
+  // Which cards look selected, just-changed or picked up is painted onto the
+  // DOM after each render: putting it in the grid's props would mean
+  // re-rendering every cell each time you tap a card.
+  const marks = useRef({ sel: NO_IDS, flash: NO_IDS, src: NO_IDS, on: false });
+  marks.current.sel = selected;
+  marks.current.flash = flash;
+  marks.current.src = drag ? new Set(drag.ids) : NO_IDS;
+  useLayoutEffect(() => {
+    const sc = scrollRef.current;
+    const { sel, flash: fl, src } = marks.current;
+    const any = sel.size > 0 || fl.size > 0 || src.size > 0;
+    if (!sc || (!any && !marks.current.on)) return;
+    marks.current.on = any;
+    for (const el of sc.querySelectorAll<HTMLElement>("[data-tid]")) {
+      const id = Number(el.dataset.tid);
+      el.classList.toggle("is-sel", sel.has(id));
+      el.classList.toggle("is-flash", fl.has(id));
+      el.classList.toggle("is-src", src.has(id));
+    }
+  });
+
   // ---------- render ----------
-  function renderCard(entry: Entry, iso: string) {
-    const t = entry.task;
-    const done = t.status === "done";
-    const late = !done && dueOf(t) < today;
-    const len = daysBetween(t.start_date, dueOf(t)) + 1;
-    const cls = [
-      "pc",
-      tradeCls(t.trade),
-      entry.cont && "pc-cont",
-      done && "is-done",
-      t.priority === "high" && "is-high",
-      late && "is-late",
-      selected.has(t.id) && "is-sel",
-      drag?.ids.includes(t.id) && "is-src",
-      flash.has(t.id) && "is-flash",
-      q && !matches(t) && "is-dim",
-    ]
-      .filter(Boolean)
-      .join(" ");
-    return (
-      <div
-        key={t.id}
-        className={cls}
-        role="button"
-        tabIndex={0}
-        title={`${t.name} · ${t.trade || "—"} · ${t.progress}%${late ? " · overdue" : ""}`}
-        onPointerDown={(e) => onCardDown(e, t, iso)}
-        onClick={(e) => onCardClick(e, t)}
-        onContextMenu={(e) => e.preventDefault()}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            setEditor({ id: t.id, rect: e.currentTarget.getBoundingClientRect() });
-          }
-        }}
-      >
-        {fullEdit && !entry.cont && (
-          <button
-            type="button"
-            className="pc-check"
-            aria-label={done ? "Mark as not done" : "Mark as done"}
-            aria-pressed={done}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleDone(t);
-            }}
-          >
-            {done && <IconCheck />}
-          </button>
-        )}
-        <div className="pc-body">
-          <div className="pc-name">
-            {t.priority === "high" && !entry.cont && <IconFlag />}
-            {t.name}
-          </div>
-          {!entry.cont && (
-            <div className="pc-meta">
-              <span>{t.workers}w · {t.hours}h</span>
-              {len > 1 && <span>{len}d</span>}
-              {late ? <span className="pc-late">Late</span> : t.progress > 0 && t.progress < 100 && <span>{t.progress}%</span>}
-            </div>
-          )}
-        </div>
-        {!entry.cont && t.progress > 0 && t.progress < 100 && <i className="pc-prog" style={{ width: `${t.progress}%` }} />}
-      </div>
-    );
+  // The grid is one memoised block with a single set of listeners on the
+  // scroller: cards and cells carry their ids in data attributes.
+  const dim = useCallback((t: Task) => !!q && !matches(t), [q, matches]);
+
+  function onGridClick(e: RMouseEvent<HTMLDivElement>) {
+    if (Date.now() < suppressClickUntil.current) return;
+    const el = e.target as HTMLElement;
+    const act = el.closest<HTMLElement>("[data-act]");
+    if (act) {
+      const what = act.dataset.act;
+      if (what === "done") {
+        const t = taskById(act.closest<HTMLElement>("[data-tid]")?.dataset.tid);
+        if (t) toggleDone(t);
+      } else if (what === "more") {
+        const key = act.dataset.key!;
+        setExpanded((prev) => {
+          const next = new Set(prev);
+          if (!next.delete(key)) next.add(key);
+          return next;
+        });
+      } else if (what === "rm-area") {
+        const area = act.dataset.area!;
+        setExtraAreas((prev) => prev.filter((a) => a !== area));
+      }
+      return;
+    }
+    const card = el.closest<HTMLElement>("[data-tid]");
+    if (card) {
+      const t = taskById(card.dataset.tid);
+      if (t) onCardClick(e, t, card);
+      return;
+    }
+    // Clicking empty space in a cell adds a task there — unless a selection is
+    // open, where clearing it is what you want.
+    const cell = el.closest<HTMLElement>("[data-cell]");
+    if (!cell) return;
+    if (selected.size) setSelected(new Set());
+    else if (cell.hasAttribute("data-add")) openComposer({ area: cell.dataset.area!, iso: cell.dataset.iso! }, cell);
   }
 
-  function renderCell(area: string, d: (typeof days)[number]) {
-    const key = `${area}|${d.iso}`;
-    const entries = byCell.get(key) ?? [];
-    const off = offSet.has(d.iso);
-    const thin = collapsed.has(d.iso);
-    const open = expanded.has(key);
-    const limit = CARD_LIMIT[zoomUi.tier];
-    const shown = open ? entries : entries.slice(0, limit);
-    const isTarget = target && target.area === area && target.iso === d.iso;
-    const cls = [
-      "pl-cell",
-      off && "off",
-      d.iso === today && "today",
-      thin && "thin",
-      isTarget && `drop-${target.tone}`,
-    ]
-      .filter(Boolean)
-      .join(" ");
-    return (
-      <div
-        key={d.iso}
-        className={cls}
-        data-cell=""
-        data-area={area}
-        data-iso={d.iso}
-        onDoubleClick={(e) => {
-          if (e.target === e.currentTarget) openComposer({ area, iso: d.iso }, e.currentTarget);
-        }}
-      >
-        {!thin && shown.map((entry) => renderCard(entry, d.iso))}
-        {!thin && entries.length > limit && (
-          <button
-            type="button"
-            className="pl-more"
-            onClick={() =>
-              setExpanded((prev) => {
-                const next = new Set(prev);
-                if (open) next.delete(key);
-                else next.add(key);
-                return next;
-              })
-            }
-          >
-            {open ? "Show less" : `+${entries.length - limit} more`}
-          </button>
-        )}
-        {fullEdit && !off && (
-          <button
-            type="button"
-            className="pl-add"
-            aria-label={`Add a task to ${area} on ${fmtDay(d.iso)}`}
-            title="Add task (or double-click the cell)"
-            onClick={(e) => openComposer({ area, iso: d.iso }, e.currentTarget.parentElement!)}
-          >
-            <IconPlus />
-          </button>
-        )}
-      </div>
-    );
+  function onGridKey(e: RKeyboardEvent<HTMLDivElement>) {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const el = e.target as HTMLElement;
+    if (el.closest("button, input, select, a")) return;
+    const card = el.closest<HTMLElement>("[data-tid]");
+    const t = card && taskById(card.dataset.tid);
+    if (!t || !card) return;
+    e.preventDefault();
+    setEditor({ id: t.id, rect: card.getBoundingClientRect() });
   }
 
   const ghost = dragRef.current;
@@ -1207,28 +1189,55 @@ export default function Planner() {
           <button className="icon-btn" type="button" aria-label="Next period" onClick={() => shift(1)}>
             <IconChevronRight />
           </button>
-          <button
-            type="button"
-            className="pl-range"
-            title="Jump to a date"
-            onClick={() => jumpRef.current?.showPicker?.()}
-          >
-            {fmtRange(from, to)}
-            <input
-              ref={jumpRef}
-              type="date"
-              tabIndex={-1}
-              aria-hidden="true"
-              value={from}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v) setFrom(period.kind === "weeks" ? mondayOf(v) : v);
-              }}
-            />
-          </button>
+          <div className="g-filter-wrap">
+            <button
+              type="button"
+              className="pl-range"
+              title="Jump to a date"
+              aria-expanded={jumpOpen}
+              onClick={() => setJumpOpen((v) => !v)}
+            >
+              {fmtRange(from, to)}
+            </button>
+            {jumpOpen && (
+              <>
+                <div className="menu-backdrop" onClick={() => setJumpOpen(false)} />
+                <div className="g-pop pl-jump-pop">
+                  <div className="g-pop-head"><b>Jump to</b></div>
+                  <label className="field">
+                    <span className="label">{period.kind === "weeks" ? "Week of" : "Starting"}</span>
+                    <input
+                      type="date"
+                      className="input mono"
+                      value={from}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (!v) return;
+                        setFrom(period.kind === "weeks" ? mondayOf(v) : v);
+                        setJumpOpen(false);
+                      }}
+                    />
+                  </label>
+                  <div className="pl-range-foot">
+                    <span className="hint">{plural(len, "day")} shown</span>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setJumpOpen(false);
+                        goToday();
+                      }}
+                    >
+                      Today
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
-        <div className="g-filter-wrap">
+        <div className="g-filter-wrap pl-period">
           <div className="chips" role="group" aria-label="Period">
             {WEEKS.map((w) => (
               <button
@@ -1306,23 +1315,23 @@ export default function Planner() {
             ref={searchRef}
             className="input"
             placeholder="Find tasks, areas, trades…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            value={queryLive}
+            onChange={(e) => setQueryLive(e.target.value)}
             onKeyDown={(e) => {
               if (e.key !== "Escape") return;
-              setQuery("");
+              setQueryLive("");
               e.currentTarget.blur();
             }}
             aria-label="Find in planner"
           />
-          {query && (
-            <button type="button" className="g-search-x" onClick={() => setQuery("")} aria-label="Clear search">
+          {queryLive && (
+            <button type="button" className="g-search-x" onClick={() => setQueryLive("")} aria-label="Clear search">
               <IconClose />
             </button>
           )}
         </div>
 
-        <div className="g-filter-wrap">
+        <div className="g-filter-wrap pl-filters">
           <button
             type="button"
             className={`btn btn-secondary g-filter-btn ${nFilters ? "on" : ""}`}
@@ -1436,11 +1445,11 @@ export default function Planner() {
         {!isPhone && (
           <span className="pl-tips">
             {fullEdit
-              ? `Drag to move · ${alt}-drag to copy · ${mod}-click to pick several · double-click a cell to add · ${mod}+scroll to zoom`
+              ? `Drag to move · ${alt}-drag to copy · ${mod}-click to pick several · click an empty cell to add · ${mod}+scroll to zoom`
               : "Drag a task along its row to change its date · click to rename"}
           </span>
         )}
-        {isPhone && <span className="pl-tips">Press and hold a task to drag it</span>}
+        {isPhone && <span className="pl-tips">Hold a task to drag it · tap a cell to add</span>}
         <span className="spacer" />
         <span className="cal-legend pl-legend">
           {legend.map((tr) => (
@@ -1493,61 +1502,26 @@ export default function Planner() {
               className={`pl-scroll ${drag ? "pl-dragging" : ""}`}
               ref={scrollRef}
               onPointerDown={onGridDown}
+              onClick={onGridClick}
+              onKeyDown={onGridKey}
+              // A long press on a card is a drag, not a context menu.
+              onContextMenu={(e) => (e.target as HTMLElement).closest(".pc") && e.preventDefault()}
               style={{ "--pl-cols": cols, "--pl-lanes-w": lanesW, "--pl-col-w": `${colW}px` } as CSSProperties}
             >
               <div className="pl-grid">
                 {rows.length > 0 && (
-                  <div className="pl-row pl-head">
-                    <div className="pl-corner">
-                      Area <span className="panel-count">{rows.length}</span>
-                    </div>
-                    {days.map((d) => (
-                      <div
-                        key={d.iso}
-                        className={`pl-dh ${offSet.has(d.iso) ? "off" : ""} ${d.iso === today ? "today" : ""} ${collapsed.has(d.iso) ? "thin" : ""}`}
-                        title={fmtDay(d.iso)}
-                      >
-                        {collapsed.has(d.iso) ? (
-                          <em>{d.weekday.slice(0, 1)}</em>
-                        ) : (
-                          <>
-                            {d.month && <i>{d.month}</i>}
-                            <em>{d.weekday}</em>
-                            <b>{d.dom}</b>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                  <GridBody
+                    rows={rows}
+                    days={days}
+                    today={today}
+                    offSet={offSet}
+                    collapsed={collapsed}
+                    expanded={expanded}
+                    limit={CARD_LIMIT[zoomUi.tier]}
+                    fullEdit={fullEdit}
+                    dim={dim}
+                  />
                 )}
-
-                {rows.map((r) => (
-                  <div key={r.area} className="pl-row">
-                    <div className="pl-area">
-                      <b>{r.area}</b>
-                      {r.total > 0 ? (
-                        <>
-                          <span>{plural(r.total, "task")} · {r.pct}%</span>
-                          <div className={`progress ${r.pct >= 100 ? "is-done" : ""}`}><span style={{ width: `${r.pct}%` }} /></div>
-                        </>
-                      ) : (
-                        <span>
-                          No tasks yet
-                          {r.extra && fullEdit && (
-                            <button
-                              type="button"
-                              className="g-link pl-area-x"
-                              onClick={() => setExtraAreas((prev) => prev.filter((a) => a !== r.area))}
-                            >
-                              Remove
-                            </button>
-                          )}
-                        </span>
-                      )}
-                    </div>
-                    {days.map((d) => renderCell(r.area, d))}
-                  </div>
-                ))}
 
                 {fullEdit && (
                   <div className="pl-row pl-addrow">
@@ -1591,7 +1565,7 @@ export default function Planner() {
             <div className="pc-body"><div className="pc-name">{ghost.lead.name}</div></div>
           </div>
           {ghost.ids.length > 1 && <span className="pl-ghost-n">{ghost.ids.length}</span>}
-          {target && <div className={`pl-ghost-tip ${target.tone}`}>{target.tip}</div>}
+          <div className="pl-ghost-tip" ref={tipRef} hidden />
         </div>
       )}
 

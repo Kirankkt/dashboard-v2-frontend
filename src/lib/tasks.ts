@@ -42,12 +42,6 @@ export interface TaskInput {
   progress: number;
 }
 
-export interface RolloverResult {
-  moved: number;
-  cutoff: string;
-  moved_to: string;
-}
-
 export const getProject = (token: string | null) => api<Project>("/project", { token });
 
 export const listTasks = (token: string | null) => api<Task[]>("/tasks", { token });
@@ -64,12 +58,6 @@ export const updateTask = (token: string | null, id: number, body: Partial<TaskI
 
 export const deleteTask = (token: string | null, id: number) =>
   api<null>(`/tasks/${id}`, { method: "DELETE", token });
-
-export const rolloverTasks = (token: string | null, cutoff?: string) =>
-  api<RolloverResult>(`/tasks/rollover${cutoff ? `?cutoff=${cutoff}` : ""}`, {
-    method: "POST",
-    token,
-  });
 
 export const TRADES = [
   "Demolition",

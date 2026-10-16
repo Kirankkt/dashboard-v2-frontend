@@ -130,9 +130,10 @@ export default function Calendar() {
     setYm({ y: d.getFullYear(), m: d.getMonth() });
   }
 
-  async function changeStatus(t: Task, status: TaskStatus) {
+  async function changeStatus(t: Task, status: TaskStatus, progress?: number) {
     try {
-      const u = await updateTask(token, t.id, { status });
+      // The progress picker sets a number; the server derives the status.
+      const u = await updateTask(token, t.id, progress === undefined ? { status } : { progress });
       setTasks((prev) => prev.map((x) => (x.id === u.id ? u : x)));
     } catch (e) {
       setError((e as ApiError)?.message ?? "Could not update status");
@@ -296,7 +297,7 @@ export default function Calendar() {
                         </div>
                       </div>
                       <div className={`progress agenda-prog ${t.progress >= 100 ? "is-done" : ""}`}><span style={{ width: `${t.progress}%` }} /></div>
-                      <StatusControl value={t.status} editable={!!canEdit} onChange={(s) => changeStatus(t, s)} />
+                      <StatusControl value={t.status} progress={t.progress} name={t.name} editable={!!canEdit} onChange={(s, p) => changeStatus(t, s, p)} />
                       {canEdit && (
                         <Menu triggerClassName="row-more" triggerLabel="Task actions" trigger={<IconMore />}>
                           {(close) => (
@@ -340,7 +341,7 @@ export default function Calendar() {
                       <div className={`progress day-prog ${t.progress >= 100 ? "is-done" : ""}`}><span style={{ width: `${t.progress}%` }} /></div>
                     </div>
                     <div className="day-task-side">
-                      <StatusControl value={t.status} editable={!!canEdit} onChange={(s) => changeStatus(t, s)} />
+                      <StatusControl value={t.status} progress={t.progress} name={t.name} editable={!!canEdit} onChange={(s, p) => changeStatus(t, s, p)} />
                       {canEdit && (
                         <div className="day-task-btns">
                           <button className="icon-btn" type="button" aria-label="Edit" onClick={() => { setDayPanel(null); setModal({ open: true, task: t }); }}><IconEdit /></button>

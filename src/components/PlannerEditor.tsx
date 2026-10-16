@@ -35,7 +35,7 @@ function closeWith(onClose: () => void) {
 }
 
 /** A panel anchored beside `anchor` on desktop, or a bottom sheet on phones. */
-function Panel({
+export function Panel({
   anchor,
   sheet,
   label,
@@ -51,6 +51,10 @@ function Panel({
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const close = closeWith(onClose);
+  // A cell opens on a single click, so the second click of a double-click
+  // lands on the backdrop — ignore it rather than closing straight away.
+  const openedAt = useRef(Date.now());
+  const closeOutside = () => Date.now() - openedAt.current > 260 && close();
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -90,7 +94,7 @@ function Panel({
 
   if (sheet) {
     return (
-      <div className="sheet" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
+      <div className="sheet" onMouseDown={(e) => { if (e.target === e.currentTarget) closeOutside(); }}>
         <div className="sheet-panel pl-sheet" role="dialog" aria-modal="true" aria-label={label}>
           <div className="sheet-grab" />
           {children}
@@ -100,7 +104,7 @@ function Panel({
   }
   return (
     <>
-      <div className="menu-backdrop" onMouseDown={close} />
+      <div className="menu-backdrop" onMouseDown={closeOutside} />
       <div
         ref={ref}
         className="pl-pop"
