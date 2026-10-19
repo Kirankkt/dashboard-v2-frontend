@@ -5,8 +5,9 @@ import { Menu } from "../components/Menu";
 import { StatusControl } from "../components/StatusControl";
 import { TaskModal } from "../components/TaskModal";
 import { useAuth, canEdit as canEditFor } from "../auth/AuthContext";
-import { IconTasks, IconPlus, IconRollover, IconMore, IconEdit, IconTrash, IconFlag } from "../components/icons";
-import { listTasks, createTask, updateTask, deleteTask } from "../lib/tasks";
+import { IconTasks, IconPlus, IconRollover, IconMore, IconEdit, IconTrash, IconFlag, IconSearch, IconFilter, IconClose } from "../components/icons";
+import { listTasks, createTask, updateTask, deleteTask, TRADES } from "../lib/tasks";
+import { tradeCls } from "../components/PlannerEditor";
 import type { Task, TaskStatus, TaskInput } from "../lib/tasks";
 import { todayISO } from "../lib/dates";
 import { saveError } from "../lib/api";
@@ -32,6 +33,19 @@ function inputOf(t: Task): TaskInput {
     priority: t.priority,
     progress: t.progress,
   };
+}
+
+function tradeOf(t: Task) {
+  return TRADES.includes(t.trade) ? t.trade : "Other";
+}
+function dueOf(t: Task) {
+  return t.end_date ?? t.start_date;
+}
+function toggleIn<T>(set: Set<T>, v: T) {
+  const next = new Set(set);
+  if (next.has(v)) next.delete(v);
+  else next.add(v);
+  return next;
 }
 
 function fmtDate(iso: string | null) {
@@ -63,6 +77,16 @@ export default function Tasks() {
   function setFilter(f: Filter) {
     setSearchParams(f === "today" ? {} : { filter: f }, { replace: true });
   }
+  // Same shape of filtering as the Gantt: a search box plus a popover of
+  // trades, areas, dates and priority, on top of the status chips.
+  const [queryLive, setQueryLive] = useState("");
+  const [query, setQuery] = useState("");
+  const [fOpen, setFOpen] = useState(false);
+  const [fTrades, setFTrades] = useState<Set<string>>(new Set());
+  const [fAreas, setFAreas] = useState<Set<string>>(new Set());
+  const [fFrom, setFFrom] = useState("");
+  const [fTo, setFTo] = useState("");
+  const [fHigh, setFHigh] = useState(false);
   const [modal, setModal] = useState<{ open: boolean; task: Task | null }>({ open: false, task: null });
   const undoRef = useRef<{ label: string; run: () => Promise<void> }[]>([]);
   const [undo, setUndo] = useState<string | null>(null);
@@ -101,24 +125,62 @@ export default function Tasks() {
   useEffect(() => {
     load();
   }, []);
+  useEffect(() => {
+    const id = window.setTimeout(() => setQuery(queryLive.trim().toLowerCase()), 160);
+    return () => window.clearTimeout(id);
+  }, [queryLive]);
+
+  const allAreas = useMemo(
+    () => [...new Set(tasks.map((t) => t.area))].sort((a, b) => a.localeCompare(b)),
+    [tasks],
+  );
+  const allTrades = useMemo(
+    () => [...new Set(tasks.map(tradeOf))].sort((a, b) => TRADES.indexOf(a) - TRADES.indexOf(b)),
+    [tasks],
+  );
+  const nFilters = fTrades.size + fAreas.size + (fFrom ? 1 : 0) + (fTo ? 1 : 0) + (fHigh ? 1 : 0);
+
+  // Everything except the status chip, so the chip counts say what picking one
+  // would actually show.
+  const pool = useMemo(
+    () =>
+      tasks.filter((t) => {
+        if (query && !`${t.name} ${t.area} ${t.trade}`.toLowerCase().includes(query)) return false;
+        if (fTrades.size && !fTrades.has(tradeOf(t))) return false;
+        if (fAreas.size && !fAreas.has(t.area)) return false;
+        if (fHigh && t.priority !== "high") return false;
+        if (fFrom && dueOf(t) < fFrom) return false; // keep anything overlapping the window
+        if (fTo && t.start_date > fTo) return false;
+        return true;
+      }),
+    [tasks, query, fTrades, fAreas, fHigh, fFrom, fTo],
+  );
 
   const counts = useMemo(() => {
-    const c = { all: tasks.length, today: 0, todo: 0, in_progress: 0, done: 0, overdue: 0 };
-    for (const t of tasks) {
+    const c = { all: pool.length, today: 0, todo: 0, in_progress: 0, done: 0, overdue: 0 };
+    for (const t of pool) {
       c[t.status]++;
       if (isOverdue(t)) c.overdue++;
       if (isToday(t)) c.today++;
     }
     return c;
-  }, [tasks]);
+  }, [pool]);
   const donePct = counts.all ? Math.round((counts.done / counts.all) * 100) : 0;
 
   const visible = useMemo(() => {
-    if (filter === "all") return tasks;
-    if (filter === "today") return tasks.filter(isToday);
-    if (filter === "overdue") return tasks.filter(isOverdue);
-    return tasks.filter((t) => t.status === filter);
-  }, [tasks, filter]);
+    if (filter === "all") return pool;
+    if (filter === "today") return pool.filter(isToday);
+    if (filter === "overdue") return pool.filter(isOverdue);
+    return pool.filter((t) => t.status === filter);
+  }, [pool, filter]);
+
+  function clearFilters() {
+    setFTrades(new Set());
+    setFAreas(new Set());
+    setFFrom("");
+    setFTo("");
+    setFHigh(false);
+  }
 
   const replace = (u: Task) => setTasks((prev) => prev.map((x) => (x.id === u.id ? u : x)));
 
@@ -211,6 +273,115 @@ export default function Tasks() {
             </button>
           ))}
         </div>
+
+        <div className="search-wrap g-search">
+          <IconSearch />
+          <input
+            className="input"
+            placeholder="Search tasks, areas, trades…"
+            value={queryLive}
+            onChange={(e) => setQueryLive(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Escape") return;
+              setQueryLive("");
+              e.currentTarget.blur();
+            }}
+            aria-label="Search tasks"
+          />
+          {queryLive && (
+            <button type="button" className="g-search-x" onClick={() => setQueryLive("")} aria-label="Clear search">
+              <IconClose />
+            </button>
+          )}
+        </div>
+
+        <div className="g-filter-wrap">
+          <button
+            type="button"
+            className={`btn btn-secondary g-filter-btn ${nFilters ? "on" : ""}`}
+            onClick={() => setFOpen((v) => !v)}
+            aria-expanded={fOpen}
+          >
+            <IconFilter />
+            Filters
+            {nFilters > 0 && <span className="panel-count">{nFilters}</span>}
+          </button>
+          {fOpen && (
+            <>
+              <div className="menu-backdrop" onClick={() => setFOpen(false)} />
+              <div className="g-pop">
+                <div className="g-pop-head">
+                  <b>Filters</b>
+                  <button type="button" className="g-link" onClick={clearFilters} disabled={!nFilters}>
+                    Clear all
+                  </button>
+                </div>
+
+                <div className="g-pop-sec">
+                  <label>Trade</label>
+                  <div className="g-pop-tags">
+                    {allTrades.map((tr) => (
+                      <button
+                        key={tr}
+                        type="button"
+                        className={`g-tag ${tradeCls(tr)}`}
+                        aria-pressed={fTrades.has(tr)}
+                        onClick={() => setFTrades((v) => toggleIn(v, tr))}
+                      >
+                        <i />
+                        {tr}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="g-pop-sec">
+                  <label>Priority</label>
+                  <div className="g-pop-tags">
+                    <button type="button" className="g-tag" aria-pressed={fHigh} onClick={() => setFHigh((v) => !v)}>
+                      High priority only
+                    </button>
+                  </div>
+                </div>
+
+                <div className="g-pop-sec">
+                  <label>Dates overlapping</label>
+                  <div className="g-pop-dates">
+                    <input
+                      type="date"
+                      className="input"
+                      value={fFrom}
+                      max={fTo || undefined}
+                      onChange={(e) => setFFrom(e.target.value)}
+                      aria-label="From date"
+                    />
+                    <span>to</span>
+                    <input
+                      type="date"
+                      className="input"
+                      value={fTo}
+                      min={fFrom || undefined}
+                      onChange={(e) => setFTo(e.target.value)}
+                      aria-label="To date"
+                    />
+                  </div>
+                </div>
+
+                <div className="g-pop-sec">
+                  <label>Area{fAreas.size > 0 && ` (${fAreas.size})`}</label>
+                  <div className="g-pop-list">
+                    {allAreas.map((a) => (
+                      <label key={a} className="g-check">
+                        <input type="checkbox" checked={fAreas.has(a)} onChange={() => setFAreas((v) => toggleIn(v, a))} />
+                        {a}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="data-card">
@@ -219,15 +390,34 @@ export default function Tasks() {
         ) : visible.length === 0 ? (
           <div className="empty">
             <h3>
-              {filter === "all"
-                ? "No tasks yet"
-                : filter === "today"
-                  ? "Nothing scheduled for today"
-                  : filter === "overdue"
-                    ? "Nothing is overdue"
-                    : "Nothing here"}
+              {query || nFilters
+                ? "Nothing matches these filters"
+                : filter === "all"
+                  ? "No tasks yet"
+                  : filter === "today"
+                    ? "Nothing scheduled for today"
+                    : filter === "overdue"
+                      ? "Nothing is overdue"
+                      : "Nothing here"}
             </h3>
-            <p className="hint">{canEdit ? "Add your first task to start planning the build." : "Tasks will appear here once the contractor adds them."}</p>
+            <p className="hint">
+              {query || nFilters ? (
+                <button
+                  type="button"
+                  className="g-link"
+                  onClick={() => {
+                    clearFilters();
+                    setQueryLive("");
+                  }}
+                >
+                  Clear search and filters
+                </button>
+              ) : canEdit ? (
+                "Add your first task to start planning the build."
+              ) : (
+                "Tasks will appear here once the contractor adds them."
+              )}
+            </p>
           </div>
         ) : (
           <div className="tbl-scroll">

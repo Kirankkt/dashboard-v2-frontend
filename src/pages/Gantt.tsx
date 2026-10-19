@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, KeyboardEvent } from "react";
+import type { CSSProperties, KeyboardEvent, PointerEvent as RPointerEvent } from "react";
 import { AppShell } from "../components/AppShell";
 import { useAuth } from "../auth/AuthContext";
 import {
@@ -213,6 +213,7 @@ export default function Gantt() {
   const [fLate, setFLate] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const panStopRef = useRef<(() => void) | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const didInitScroll = useRef(false);
   const zoomAnchor = useRef<number | null>(null);
@@ -407,6 +408,48 @@ export default function Gantt() {
     didInitScroll.current = true;
     el.scrollLeft = Math.max(0, (todayOff - 3) * dayW);
   }, [loading, todayOff, dayW, asList]);
+
+  /** Drag the chart around instead of hunting for the scrollbars. Anything
+   *  you can actually click — the inline name and date fields, the group
+   *  headers — keeps its own behaviour. */
+  function onPan(e: RPointerEvent<HTMLDivElement>) {
+    if (e.pointerType !== "mouse" || e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("input, button, select, textarea, a")) return;
+    const sc = e.currentTarget;
+    const start = { x: e.clientX, y: e.clientY, left: sc.scrollLeft, top: sc.scrollTop };
+    let panning = false;
+    const move = (ev: globalThis.PointerEvent) => {
+      const dx = ev.clientX - start.x;
+      const dy = ev.clientY - start.y;
+      if (!panning) {
+        if (Math.hypot(dx, dy) < 4) return;
+        panning = true;
+        document.body.classList.add("pl-panning");
+        window.getSelection()?.removeAllRanges();
+      }
+      sc.scrollLeft = start.left - dx;
+      sc.scrollTop = start.top - dy;
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      document.body.classList.remove("pl-panning");
+      panStopRef.current = null;
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    panStopRef.current = up;
+  }
+  // Leaving the page mid-pan would strand the listeners and the cursor.
+  useEffect(
+    () => () => {
+      panStopRef.current?.();
+      document.body.classList.remove("pl-panning");
+    },
+    [],
+  );
 
   function scrollToToday() {
     scrollRef.current?.scrollTo({ left: Math.max(0, (todayOff - 3) * dayW), behavior: "smooth" });
@@ -811,7 +854,7 @@ export default function Gantt() {
             })}
           </div>
         ) : (
-          <div className={`g-scroll ${isPhone ? "g-mini" : ""}`} ref={scrollRef}>
+          <div className={`g-scroll ${isPhone ? "g-mini" : ""}`} ref={scrollRef} onPointerDown={onPan}>
             <div className="g-canvas">
               {/* One painted layer for the whole chart: day grid, weekends,
                   alternating months and the today marker. */}
