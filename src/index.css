@@ -945,6 +945,28 @@ body.pl-panning, body.pl-panning * { cursor: grabbing !important; user-select: n
   .ev { padding: 4px 6px 4px 5px; }
   .zoom button { width: 40px; height: 40px; }
   .cal-cell { min-height: 92px; }
+
+  /* Five full-size stat cards pushed the task list most of a screen down,
+     on the page the contractor spends the day in. Same numbers, three to a
+     row, close enough to the top to log something. */
+  .stat-row { grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  .stat { padding: 9px 10px; }
+  .stat .k { gap: 5px; margin-bottom: 5px; font-size: 0.6875rem; }
+  .stat .k .dot { width: 6px; height: 6px; }
+  .stat .v { font-size: 1.125rem; }
+  .stat .v small { font-size: 0.6875rem; }
+
+  /* A 320px popover anchored to a button can't fit beside the screen edge,
+     whichever side the button happens to land on after the bar wraps. On a
+     phone these open along the bottom instead, where there's room to tap. */
+  .g-pop {
+    position: fixed; inset: auto 0 0 0; width: auto; max-width: none;
+    max-height: 72vh; z-index: 60;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    border-bottom: 0;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+  .menu-backdrop { z-index: 55; }
 }
 
 /* ---- small-screen fixes ---- */

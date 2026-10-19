@@ -93,7 +93,8 @@ const MemoCard = memo(Card);
 // A row the browser hasn't drawn yet still needs a height, or the scrollbar
 // lies and the view jumps while you scroll. Rows are as tall as their fullest
 // cell: card (~40px) plus the gap, or the empty-cell minimum.
-const CARD_H = 44;
+const CARD_H = 44; // a card with its gap, at the roomier zoom levels
+const CONT_H = 24; // a continuation card is one line
 const ROW_PAD = 10;
 const MIN_ROW_H = 84;
 const MORE_H = 22;
@@ -101,11 +102,13 @@ const MORE_H = 22;
 function rowHeight(row: GridRow, days: Day[], limit: number, expanded: Set<string>) {
   let tallest = 0;
   for (let i = 0; i < row.cells.length; i++) {
-    const n = row.cells[i].length;
-    if (!n) continue;
+    const cell = row.cells[i];
+    if (!cell.length) continue;
     const open = expanded.has(`${row.area}|${days[i].iso}`);
-    const shown = open ? n : Math.min(n, limit);
-    tallest = Math.max(tallest, ROW_PAD + shown * CARD_H + (n > limit && !open ? MORE_H : 0));
+    const shown = open ? cell.length : Math.min(cell.length, limit);
+    let h = ROW_PAD + (cell.length > limit && !open ? MORE_H : 0);
+    for (let j = 0; j < shown; j++) h += cell[j].cont ? CONT_H : CARD_H;
+    if (h > tallest) tallest = h;
   }
   return Math.max(MIN_ROW_H, tallest);
 }
