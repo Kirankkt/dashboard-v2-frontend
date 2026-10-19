@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { api, setAuthLostHandler } from "../lib/api";
+import type { ApiError } from "../lib/api";
 
 export type Role = "contractor" | "client";
 
@@ -29,6 +30,8 @@ interface AuthState {
   /** The session ended on its own (expired or revoked), rather than by signing
    *  out — the login screen says so instead of leaving the user guessing. */
   expired: boolean;
+  /** Holding a valid session open while the server is unreachable. */
+  reconnecting: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -41,6 +44,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [status, setStatus] = useState<Status>("loading");
   const [expired, setExpired] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   // Any request rejected for a dead token ends the session once, here, so a
   // contractor mid-update gets sent to the login screen with a reason instead
@@ -65,24 +70,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     let active = true;
-    setStatus("loading");
+    let timer = 0;
+    setStatus((s) => (s === "authed" ? s : "loading"));
     api<User>("/auth/me", { token })
       .then((u) => {
         if (!active) return;
         setUser(u);
         setStatus("authed");
+        setReconnecting(false);
       })
-      .catch(() => {
+      .catch((e) => {
         if (!active) return;
-        localStorage.removeItem(TOKEN_KEY);
-        setToken(null);
-        setUser(null);
-        setStatus("anon");
+        if ((e as ApiError)?.status === 401) {
+          // Handled by the auth-lost handler above; nothing to keep.
+          setStatus("anon");
+          return;
+        }
+        // The server was unreachable, which is not a reason to throw away a
+        // working session — a site with one bar would log the contractor out
+        // every time the app reloaded. Hold it and keep trying.
+        setReconnecting(true);
+        timer = window.setTimeout(() => setRetry((n) => n + 1), 5000);
       });
     return () => {
       active = false;
+      if (timer) window.clearTimeout(timer);
     };
-  }, [token]);
+  }, [token, retry]);
 
   async function login(email: string, password: string) {
     const res = await api<{ access_token: string }>("/auth/login", {
@@ -108,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, status, expired, login, logout }}>
+    <AuthContext.Provider value={{ user, token, status, expired, reconnecting, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
