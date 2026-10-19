@@ -1,4 +1,5 @@
 import { memo } from "react";
+import type { CSSProperties } from "react";
 import { tradeCls } from "./PlannerEditor";
 import { IconCheck, IconFlag } from "./icons";
 import type { Task } from "../lib/tasks";
@@ -34,8 +35,7 @@ function plural(n: number, word: string) {
 /** One task card. Selection, flash and drag-source highlights are *not* props:
  * the Planner toggles those classes on the DOM so moving a card around never
  * re-renders the grid. */
-function Card({ entry, today, dim, canTick }: { entry: Entry; today: string; dim: boolean; canTick: boolean }) {
-  const t = entry.task;
+function Card({ task: t, cont, today, dim, canTick }: { task: Task; cont: boolean; today: string; dim: boolean; canTick: boolean }) {
   const done = t.status === "done";
   const due = t.end_date && t.end_date > t.start_date ? t.end_date : t.start_date;
   const late = !done && due < today;
@@ -43,7 +43,7 @@ function Card({ entry, today, dim, canTick }: { entry: Entry; today: string; dim
   const cls = [
     "pc",
     tradeCls(t.trade),
-    entry.cont && "pc-cont",
+    cont && "pc-cont",
     done && "is-done",
     t.priority === "high" && "is-high",
     late && "is-late",
@@ -59,7 +59,7 @@ function Card({ entry, today, dim, canTick }: { entry: Entry; today: string; dim
       tabIndex={0}
       title={`${t.name} · ${t.trade || "—"} · ${t.progress}%${late ? " · overdue" : ""}`}
     >
-      {canTick && !entry.cont && (
+      {canTick && !cont && (
         <button
           type="button"
           className="pc-check"
@@ -72,10 +72,10 @@ function Card({ entry, today, dim, canTick }: { entry: Entry; today: string; dim
       )}
       <div className="pc-body">
         <div className="pc-name">
-          {t.priority === "high" && !entry.cont && <IconFlag />}
+          {t.priority === "high" && !cont && <IconFlag />}
           {t.name}
         </div>
-        {!entry.cont && (
+        {!cont && (
           <div className="pc-meta">
             <span>{t.workers}w · {t.hours}h</span>
             {days > 1 && <span>{days}d</span>}
@@ -83,16 +83,37 @@ function Card({ entry, today, dim, canTick }: { entry: Entry; today: string; dim
           </div>
         )}
       </div>
-      {!entry.cont && t.progress > 0 && t.progress < 100 && <i className="pc-prog" style={{ width: `${t.progress}%` }} />}
+      {!cont && t.progress > 0 && t.progress < 100 && <i className="pc-prog" style={{ width: `${t.progress}%` }} />}
     </div>
   );
 }
 
 const MemoCard = memo(Card);
 
+// A row the browser hasn't drawn yet still needs a height, or the scrollbar
+// lies and the view jumps while you scroll. Rows are as tall as their fullest
+// cell: card (~40px) plus the gap, or the empty-cell minimum.
+const CARD_H = 44;
+const ROW_PAD = 10;
+const MIN_ROW_H = 84;
+const MORE_H = 22;
+
+function rowHeight(row: GridRow, days: Day[], limit: number, expanded: Set<string>) {
+  let tallest = 0;
+  for (let i = 0; i < row.cells.length; i++) {
+    const n = row.cells[i].length;
+    if (!n) continue;
+    const open = expanded.has(`${row.area}|${days[i].iso}`);
+    const shown = open ? n : Math.min(n, limit);
+    tallest = Math.max(tallest, ROW_PAD + shown * CARD_H + (n > limit && !open ? MORE_H : 0));
+  }
+  return Math.max(MIN_ROW_H, tallest);
+}
+
 function Row({ row, days, today, offSet, collapsed, expanded, limit, fullEdit, dim }: Props & { row: GridRow }) {
+  const style = { containIntrinsicSize: `auto ${rowHeight(row, days, limit, expanded)}px` } as CSSProperties;
   return (
-    <div className="pl-row">
+    <div className="pl-row" style={style}>
       <div className="pl-area">
         <b>{row.area}</b>
         {row.total > 0 ? (
@@ -127,7 +148,14 @@ function Row({ row, days, today, offSet, collapsed, expanded, limit, fullEdit, d
             {...(fullEdit && !off && !thin ? { "data-add": "" } : null)}
           >
             {shown.map((entry) => (
-              <MemoCard key={entry.task.id} entry={entry} today={today} dim={dim(entry.task)} canTick={fullEdit} />
+              <MemoCard
+                key={entry.task.id}
+                task={entry.task}
+                cont={entry.cont}
+                today={today}
+                dim={dim(entry.task)}
+                canTick={fullEdit}
+              />
             ))}
             {!thin && entries.length > limit && (
               <button type="button" className="pl-more" data-act="more" data-key={key}>
@@ -140,6 +168,41 @@ function Row({ row, days, today, offSet, collapsed, expanded, limit, fullEdit, d
     </div>
   );
 }
+
+/** Same tasks, in the same places? Then the row's output is identical and
+ *  React can leave its whole subtree alone — which is what keeps editing one
+ *  task off the other thirty rows. */
+function sameCells(a: Entry[][], b: Entry[][]) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (x === y) continue;
+    if (x.length !== y.length) return false;
+    for (let j = 0; j < x.length; j++) {
+      if (x[j].task !== y[j].task || x[j].cont !== y[j].cont) return false;
+    }
+  }
+  return true;
+}
+
+const MemoRow = memo(
+  Row,
+  (a, b) =>
+    a.limit === b.limit &&
+    a.fullEdit === b.fullEdit &&
+    a.dim === b.dim &&
+    a.today === b.today &&
+    a.days === b.days &&
+    a.offSet === b.offSet &&
+    a.collapsed === b.collapsed &&
+    a.expanded === b.expanded &&
+    a.row.area === b.row.area &&
+    a.row.total === b.row.total &&
+    a.row.pct === b.row.pct &&
+    a.row.extra === b.row.extra &&
+    sameCells(a.row.cells, b.row.cells),
+);
 
 /** The grid's head and body. Everything here is derived from the schedule, so
  * React only has to touch it when the schedule, the period or a filter changes
@@ -174,7 +237,7 @@ function GridBody(props: Props) {
         })}
       </div>
       {rows.map((r) => (
-        <Row key={r.area} row={r} {...props} />
+        <MemoRow key={r.area} row={r} {...props} />
       ))}
     </>
   );

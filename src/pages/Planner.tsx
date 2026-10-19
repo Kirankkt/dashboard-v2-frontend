@@ -40,12 +40,12 @@ type Period = { kind: "weeks"; weeks: Weeks } | { kind: "custom"; days: number }
 const MAX_CUSTOM_DAYS = 180;
 // Zoom = minimum day-column width. Narrow columns show less on each card.
 const ZOOM_MIN = 52;
-const ZOOM_MAX = 260;
+const ZOOM_MAX = 420;
 const ZOOM_STEP = 1.2;
 const THIN_W = 30; // an empty off-day column
 type Tier = "s" | "m" | "l" | "xl";
 const tierOf = (w: number): Tier => (w < 72 ? "s" : w < 104 ? "m" : w < 140 ? "l" : "xl");
-const CARD_LIMIT: Record<Tier, number> = { s: 3, m: 3, l: 4, xl: 6 };
+const CARD_LIMIT: Record<Tier, number> = { s: 3, m: 3, l: 4, xl: 8 };
 const PREFS_KEY = "planner_prefs";
 const AREAS_KEY = "planner_areas";
 const TRADE_KEY = "planner_trade";
@@ -227,6 +227,10 @@ export default function Planner() {
   const suppressClickUntil = useRef(0);
   const undoRef = useRef<Undo[]>([]);
   const panStopRef = useRef<(() => void) | null>(null);
+  const addBtnRef = useRef<HTMLButtonElement>(null);
+  const addCellRef = useRef<Cell | null>(null);
+  const hoverCellRef = useRef<HTMLElement | null>(null);
+  const downAt = useRef({ x: 0, y: 0 });
   const didScroll = useRef(false);
 
   // ---------- data ----------
@@ -589,6 +593,7 @@ export default function Planner() {
   // ---------- one listener for the grid: press a card, or pan the view ----------
   function onGridDown(e: RPointerEvent<HTMLDivElement>) {
     const el = e.target as HTMLElement;
+    downAt.current = { x: e.clientX, y: e.clientY };
     if (!el.closest("button, input, select, a")) {
       const card = el.closest<HTMLElement>("[data-tid]");
       const cell = card?.closest<HTMLElement>("[data-cell]");
@@ -621,6 +626,8 @@ export default function Planner() {
       window.removeEventListener("pointercancel", up);
       document.body.classList.remove("pl-panning");
       panStopRef.current = null;
+      // Dragging the view around ends in a click. It isn't one.
+      if (panning) suppressClickUntil.current = Date.now() + 400;
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -1060,6 +1067,32 @@ export default function Planner() {
     setComposer({ ...cell, rect: el.getBoundingClientRect() });
   }
 
+  /** Adding is deliberate: one + button follows the pointer around the grid
+   *  (or lands on the cell you tap) and nothing else opens the composer, so
+   *  dragging the timeline can't conjure a new task. One button rather than
+   *  one per cell — there are thousands of cells. */
+  function offerAdd(cell: HTMLElement | null) {
+    const btn = addBtnRef.current;
+    hoverCellRef.current = cell;
+    if (!btn) return;
+    if (!cell) {
+      btn.hidden = true;
+      addCellRef.current = null;
+      return;
+    }
+    addCellRef.current = { area: cell.dataset.area!, iso: cell.dataset.iso! };
+    btn.style.transform = `translate(${cell.offsetLeft + cell.offsetWidth - 26}px, ${cell.offsetTop + cell.offsetHeight - 26}px)`;
+    btn.hidden = false;
+  }
+
+  function onGridOver(e: RPointerEvent<HTMLDivElement>) {
+    if (!fullEdit || dragRef.current || e.pointerType !== "mouse") return;
+    const el = e.target as HTMLElement;
+    if (el.closest(".pl-addbtn")) return; // hovering the button itself
+    const cell = el.closest<HTMLElement>("[data-add]");
+    if (cell !== hoverCellRef.current) offerAdd(cell);
+  }
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
@@ -1119,6 +1152,8 @@ export default function Planner() {
 
   function onGridClick(e: RMouseEvent<HTMLDivElement>) {
     if (Date.now() < suppressClickUntil.current) return;
+    // Anything that moved on the way to the mouse-up was a drag, not a click.
+    if (Math.hypot(e.clientX - downAt.current.x, e.clientY - downAt.current.y) > 6) return;
     const el = e.target as HTMLElement;
     const act = el.closest<HTMLElement>("[data-act]");
     if (act) {
@@ -1133,6 +1168,9 @@ export default function Planner() {
           if (!next.delete(key)) next.add(key);
           return next;
         });
+      } else if (what === "add") {
+        const cell = addCellRef.current;
+        if (cell) openComposer(cell, act);
       } else if (what === "rm-area") {
         const area = act.dataset.area!;
         setExtraAreas((prev) => prev.filter((a) => a !== area));
@@ -1145,12 +1183,12 @@ export default function Planner() {
       if (t) onCardClick(e, t, card);
       return;
     }
-    // Clicking empty space in a cell adds a task there — unless a selection is
-    // open, where clearing it is what you want.
+    // Tapping a cell clears an open selection, or — on a touch screen, where
+    // there's no hover — offers the + for that cell. It never adds by itself.
     const cell = el.closest<HTMLElement>("[data-cell]");
     if (!cell) return;
     if (selected.size) setSelected(new Set());
-    else if (cell.hasAttribute("data-add")) openComposer({ area: cell.dataset.area!, iso: cell.dataset.iso! }, cell);
+    else if (cell.hasAttribute("data-add")) offerAdd(cell);
   }
 
   function onGridKey(e: RKeyboardEvent<HTMLDivElement>) {
@@ -1451,11 +1489,11 @@ export default function Planner() {
         {!isPhone && (
           <span className="pl-tips">
             {fullEdit
-              ? `Drag to move · ${alt}-drag to copy · ${mod}-click to pick several · click an empty cell to add · ${mod}+scroll to zoom`
+              ? `Drag to move · ${alt}-drag to copy · ${mod}-click to pick several · + in a cell adds · drag the background to pan · ${mod}+scroll to zoom`
               : "Drag a task along its row to change its date · click to rename"}
           </span>
         )}
-        {isPhone && <span className="pl-tips">Hold a task to drag it · tap a cell to add</span>}
+        {isPhone && <span className="pl-tips">Hold a task to drag it · tap a cell, then +, to add</span>}
         <span className="spacer" />
         <span className="cal-legend pl-legend">
           {legend.map((tr) => (
@@ -1508,6 +1546,8 @@ export default function Planner() {
               className={`pl-scroll ${drag ? "pl-dragging" : ""}`}
               ref={scrollRef}
               onPointerDown={onGridDown}
+              onPointerOver={onGridOver}
+              onPointerLeave={() => offerAdd(null)}
               onClick={onGridClick}
               onKeyDown={onGridKey}
               // A long press on a card is a drag, not a context menu.
@@ -1515,6 +1555,19 @@ export default function Planner() {
               style={{ "--pl-cols": cols, "--pl-lanes-w": lanesW, "--pl-col-w": `${colW}px` } as CSSProperties}
             >
               <div className="pl-grid">
+                {fullEdit && (
+                  <button
+                    type="button"
+                    className="pl-addbtn"
+                    data-act="add"
+                    ref={addBtnRef}
+                    hidden
+                    aria-label="Add a task in this cell"
+                    title="Add a task here"
+                  >
+                    <IconPlus />
+                  </button>
+                )}
                 {rows.length > 0 && (
                   <GridBody
                     rows={rows}

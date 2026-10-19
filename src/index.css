@@ -693,8 +693,17 @@ input.g-date.g-noend:hover { color: var(--text-subtle); }
 
 .pl-wrap { position: relative; --pl-area-w: 188px; }
 .pl-scroll { overflow: auto; max-height: calc(100dvh - 232px); min-height: 360px; overscroll-behavior: contain; }
-.pl-grid { width: max(100%, calc(var(--pl-area-w) + var(--pl-lanes-w))); }
+.pl-grid { position: relative; width: max(100%, calc(var(--pl-area-w) + var(--pl-lanes-w))); }
+.pl-addbtn { position: absolute; top: 0; left: 0; z-index: 3; width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface-3); color: var(--text-muted); cursor: pointer; }
+.pl-addbtn svg { width: 13px; height: 13px; }
+.pl-addbtn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pl-addbtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.pl-dragging .pl-addbtn, body.pl-panning .pl-addbtn { display: none; }
 .pl-row { display: grid; grid-template-columns: var(--pl-cols); }
+/* A long range is thousands of cells. Rows that aren't on screen are skipped
+   for layout and paint — the browser's own virtualisation, so hit-testing,
+   drag targets and measurements all still work on the real DOM. */
+.pl-row:not(.pl-head) { content-visibility: auto; contain-intrinsic-size: auto 88px; } /* the exact height comes from the row's own style */
 .pl-row + .pl-row { border-top: 1px solid var(--border); }
 .pl-head { position: sticky; top: 0; z-index: 4; background: var(--surface-2); border-bottom: 1px solid var(--border-strong); }
 .pl-head + .pl-row { border-top: 0; }
@@ -727,8 +736,6 @@ input.g-date.g-noend:hover { color: var(--text-subtle); }
 
 /* An empty spot in a cell adds a task there; the hint is a pseudo-element so
    that thousands of cells cost no extra DOM. */
-.pl-cell[data-add]:hover::after { content: "+"; position: absolute; right: 4px; bottom: 3px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 6px; background: var(--surface-3); color: var(--text-muted); font-size: 0.875rem; font-weight: 600; line-height: 1; pointer-events: none; }
-.pl-dragging .pl-cell::after { content: none; }
 
 .pl-more { align-self: flex-start; border: 0; background: transparent; padding: 1px 5px; border-radius: 5px; font-family: var(--font-sans); font-size: 0.6875rem; font-weight: 600; color: var(--accent); cursor: pointer; }
 .pl-more:hover { background: var(--accent-weak); }
