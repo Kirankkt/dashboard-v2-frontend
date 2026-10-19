@@ -28,7 +28,10 @@ import { listTasks, createTask, updateTask, deleteTask, getOffDays, TRADES } fro
 import type { Task, TaskInput, TaskStatus } from "../lib/tasks";
 import { todayISO, addDaysISO, dateOf } from "../lib/dates";
 import { useIsPhone } from "../lib/useIsPhone";
+import { saveError } from "../lib/api";
 import type { ApiError } from "../lib/api";
+import { SaveAlert } from "../components/SaveAlert";
+import type { SaveFailure } from "../components/SaveAlert";
 
 const PHONE = "(max-width: 700px)";
 const WEEKS = [1, 2, 4] as const;
@@ -210,6 +213,7 @@ export default function Planner() {
   const [drag, setDrag] = useState<Drag | null>(null);
   const [edge, setEdge] = useState<-1 | 0 | 1>(0);
   const [undoCount, setUndoCount] = useState(0);
+  const [failure, setFailure] = useState<SaveFailure | null>(null);
   const [toast, setToast] = useState<{ text: string; undo: boolean; n: number } | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -435,12 +439,13 @@ export default function Planner() {
     try {
       await entry.run();
     } catch (e) {
-      setError((e as ApiError)?.message ?? "Couldn't undo that — reloaded the latest schedule.");
-      load().catch(() => {});
+      fail(e, "That undo");
     }
   }
-  function fail(e: unknown, fallback: string) {
-    setError((e as ApiError)?.message ?? fallback);
+  /** A write that didn't land. The grid is reloaded so what's on screen is
+   *  what the server actually has, and the alert stays put until dismissed. */
+  function fail(e: unknown, what: string, retry?: () => void) {
+    setFailure({ message: saveError(e, what), retry });
     load().catch(() => {});
   }
 
@@ -636,11 +641,12 @@ export default function Planner() {
     replaceTask(applyLocal(t, body));
     try {
       replaceTask(await updateTask(token, t.id, body));
+      setFailure(null);
       pushUndo({ label, run: async () => replaceTask(await updateTask(token, t.id, before)) });
       notify(`${label}: “${t.name}”`);
     } catch (e) {
       replaceTask(t);
-      fail(e, "Could not save that change");
+      fail(e, `“${t.name}”`, () => saveTask(t, body, label));
     }
   }
 
@@ -693,7 +699,7 @@ export default function Planner() {
       });
       notify(`${label} to ${dest}`);
     } catch (e) {
-      fail(e, "Could not move that task");
+      fail(e, "That move");
     }
   }
 
@@ -724,7 +730,7 @@ export default function Planner() {
       });
       notify(`${label} to ${shortDay(created[0].start_date)}`);
     } catch (e) {
-      fail(e, "Could not copy that task");
+      fail(e, "That copy");
     }
   }
 
@@ -748,7 +754,7 @@ export default function Planner() {
       });
       notify(`Deleted ${what}`);
     } catch (e) {
-      fail(e, "Could not delete");
+      fail(e, "That delete");
     }
   }
 
@@ -1627,6 +1633,8 @@ export default function Planner() {
           }}
         />
       )}
+
+      <SaveAlert failure={failure} onDismiss={() => setFailure(null)} />
 
       {toast && (
         <div className="pl-toast" role="status" key={toast.n}>

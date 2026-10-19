@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { api } from "../lib/api";
+import { api, setAuthLostHandler } from "../lib/api";
 
 export type Role = "contractor" | "client";
 
@@ -26,6 +26,9 @@ interface AuthState {
   user: User | null;
   token: string | null;
   status: Status;
+  /** The session ended on its own (expired or revoked), rather than by signing
+   *  out — the login screen says so instead of leaving the user guessing. */
+  expired: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -37,6 +40,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
   const [user, setUser] = useState<User | null>(null);
   const [status, setStatus] = useState<Status>("loading");
+  const [expired, setExpired] = useState(false);
+
+  // Any request rejected for a dead token ends the session once, here, so a
+  // contractor mid-update gets sent to the login screen with a reason instead
+  // of a save that quietly fails.
+  useEffect(() => {
+    setAuthLostHandler(() => {
+      if (!localStorage.getItem(TOKEN_KEY)) return;
+      localStorage.removeItem(TOKEN_KEY);
+      setExpired(true);
+      setToken(null);
+      setUser(null);
+      setStatus("anon");
+    });
+    return () => setAuthLostHandler(null);
+  }, []);
 
   // Validate the token (and load the user) whenever it changes.
   useEffect(() => {
@@ -71,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: { email, password },
     });
     localStorage.setItem(TOKEN_KEY, res.access_token);
+    setExpired(false);
     setToken(res.access_token); // triggers the effect above to load /me
   }
 
@@ -81,13 +101,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // stateless logout — ignore network/token errors, we clear locally anyway
     }
     localStorage.removeItem(TOKEN_KEY);
+    setExpired(false);
     setToken(null);
     setUser(null);
     setStatus("anon");
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, status, login, logout }}>
+    <AuthContext.Provider value={{ user, token, status, expired, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

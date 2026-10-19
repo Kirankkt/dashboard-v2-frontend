@@ -19,7 +19,10 @@ import {
 import { listTasks, createTask, updateTask, deleteTask, TRADES } from "../lib/tasks";
 import type { Task, TaskStatus, TaskInput } from "../lib/tasks";
 import { isoOf, todayISO, fmtMonth } from "../lib/dates";
+import { saveError } from "../lib/api";
 import type { ApiError } from "../lib/api";
+import { SaveAlert } from "../components/SaveAlert";
+import type { SaveFailure } from "../components/SaveAlert";
 
 type View = "month" | "list";
 
@@ -46,6 +49,7 @@ export default function Calendar() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<SaveFailure | null>(null);
   // Phones default to the agenda — the month grid needs horizontal scroll there.
   const [view, setView] = useState<View>(() => (window.innerWidth <= 700 ? "list" : "month"));
   const [query, setQuery] = useState("");
@@ -135,8 +139,9 @@ export default function Calendar() {
       // The progress picker sets a number; the server derives the status.
       const u = await updateTask(token, t.id, progress === undefined ? { status } : { progress });
       setTasks((prev) => prev.map((x) => (x.id === u.id ? u : x)));
+      setFailure(null);
     } catch (e) {
-      setError((e as ApiError)?.message ?? "Could not update status");
+      setFailure({ message: saveError(e, `“${t.name}”`), retry: () => changeStatus(t, status, progress) });
     }
   }
   async function submit(data: TaskInput) {
@@ -154,8 +159,9 @@ export default function Calendar() {
     try {
       await deleteTask(token, t.id);
       setTasks((prev) => prev.filter((x) => x.id !== t.id));
+      setFailure(null);
     } catch (e) {
-      setError((e as ApiError)?.message ?? "Could not delete task");
+      setFailure({ message: saveError(e, `Deleting “${t.name}”`), retry: () => remove(t) });
     }
   }
 
@@ -372,6 +378,7 @@ export default function Calendar() {
           onSubmit={submit}
         />
       )}
+      <SaveAlert failure={failure} onDismiss={() => setFailure(null)} />
     </AppShell>
   );
 }

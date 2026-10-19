@@ -9,7 +9,10 @@ import { IconTasks, IconPlus, IconRollover, IconMore, IconEdit, IconTrash, IconF
 import { listTasks, createTask, updateTask, deleteTask } from "../lib/tasks";
 import type { Task, TaskStatus, TaskInput } from "../lib/tasks";
 import { todayISO } from "../lib/dates";
+import { saveError } from "../lib/api";
 import type { ApiError } from "../lib/api";
+import { SaveAlert } from "../components/SaveAlert";
+import type { SaveFailure } from "../components/SaveAlert";
 
 type Filter = "today" | "all" | "overdue" | TaskStatus;
 const FILTERS: Filter[] = ["today", "all", "overdue", "todo", "in_progress", "done"];
@@ -63,6 +66,9 @@ export default function Tasks() {
   const [modal, setModal] = useState<{ open: boolean; task: Task | null }>({ open: false, task: null });
   const undoRef = useRef<{ label: string; run: () => Promise<void> }[]>([]);
   const [undo, setUndo] = useState<string | null>(null);
+  // A write that didn't land. Shown over the page until it's retried or
+  // dismissed — losing a day's logging silently is the one thing we can't do.
+  const [failure, setFailure] = useState<SaveFailure | null>(null);
 
   function pushUndo(label: string, run: () => Promise<void>) {
     undoRef.current = [...undoRef.current, { label, run }].slice(-UNDO_LIMIT);
@@ -74,8 +80,9 @@ export default function Tasks() {
     if (!entry) return;
     try {
       await entry.run();
+      setFailure(null);
     } catch (e) {
-      setError((e as ApiError)?.message ?? "Could not undo that — reloaded the list.");
+      setFailure({ message: saveError(e, "That undo") });
       load();
     }
   }
@@ -119,12 +126,17 @@ export default function Tasks() {
     try {
       // The picker sets a number; the server derives the status from it.
       replace(await updateTask(token, t.id, progress === undefined ? { status } : { progress }));
+      setFailure(null);
       pushUndo(`status of “${t.name}”`, async () => replace(await updateTask(token, t.id, { progress: t.progress })));
     } catch (e) {
-      setError((e as ApiError)?.message ?? "Could not update status");
+      setFailure({
+        message: saveError(e, `“${t.name}”`),
+        retry: () => changeStatus(t, status, progress),
+      });
     }
   }
   async function submit(data: TaskInput) {
+    setFailure(null);
     if (modal.task) {
       const before = inputOf(modal.task);
       const u = await updateTask(token, modal.task.id, data);
@@ -145,12 +157,13 @@ export default function Tasks() {
     try {
       await deleteTask(token, t.id);
       setTasks((prev) => prev.filter((x) => x.id !== t.id));
+      setFailure(null);
       pushUndo(`deleting “${t.name}”`, async () => {
         const back = await createTask(token, inputOf(t));
         setTasks((prev) => [...prev, back]);
       });
     } catch (e) {
-      setError((e as ApiError)?.message ?? "Could not delete task");
+      setFailure({ message: saveError(e, `Deleting “${t.name}”`), retry: () => remove(t) });
     }
   }
 
@@ -269,6 +282,8 @@ export default function Tasks() {
       {modal.open && (
         <TaskModal initial={modal.task} onClose={() => setModal({ open: false, task: null })} onSubmit={submit} />
       )}
+
+      <SaveAlert failure={failure} onDismiss={() => setFailure(null)} />
     </AppShell>
   );
 }

@@ -6,7 +6,7 @@ import { IconCheck } from "../components/icons";
 import type { ApiError } from "../lib/api";
 
 export default function Login() {
-  const { login, status } = useAuth();
+  const { login, status, expired } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -65,6 +65,11 @@ export default function Login() {
 
           <form className="auth-form" onSubmit={onSubmit}>
             {error && <div className="auth-error" role="alert">{error}</div>}
+            {!error && expired && (
+              <div className="auth-note" role="status">
+                Your session ended, so the last change may not have been saved. Sign in and check it.
+              </div>
+            )}
 
             <div className="field">
               <label className="label" htmlFor="email">Email</label>

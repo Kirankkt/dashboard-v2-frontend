@@ -14,7 +14,10 @@ import {
 import { listTasks, updateTask } from "../lib/tasks";
 import type { Task, TaskStatus } from "../lib/tasks";
 import { todayISO, addDaysISO, fmtShort, fmtDay } from "../lib/dates";
+import { saveError } from "../lib/api";
 import type { ApiError } from "../lib/api";
+import { SaveAlert } from "../components/SaveAlert";
+import type { SaveFailure } from "../components/SaveAlert";
 
 function dueDate(t: Task) {
   return t.end_date ?? t.start_date;
@@ -38,6 +41,7 @@ export default function Dashboard() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<SaveFailure | null>(null);
 
   useEffect(() => {
     listTasks(token)
@@ -51,8 +55,9 @@ export default function Dashboard() {
       // The progress picker sets a number; the server derives the status.
       const u = await updateTask(token, t.id, progress === undefined ? { status } : { progress });
       setTasks((prev) => prev.map((x) => (x.id === u.id ? u : x)));
+      setFailure(null);
     } catch (e) {
-      setError((e as ApiError)?.message ?? "Could not update status");
+      setFailure({ message: saveError(e, `“${t.name}”`), retry: () => changeStatus(t, status, progress) });
     }
   }
 
@@ -291,6 +296,7 @@ export default function Dashboard() {
           </section>
         </div>
       )}
+      <SaveAlert failure={failure} onDismiss={() => setFailure(null)} />
     </AppShell>
   );
 }

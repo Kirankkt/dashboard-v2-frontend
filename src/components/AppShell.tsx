@@ -76,6 +76,7 @@ export function AppShell({ title, titleIcon, actions, fill, wide, children }: Pr
     return localStorage.getItem(SIDEBAR_KEY) !== "0";
   });
   const [unread, setUnread] = useState(0);
+  const [offline, setOffline] = useState(() => navigator.onLine === false);
   const [moreOpen, setMoreOpen] = useState(false);
 
   useEffect(() => {
@@ -90,6 +91,18 @@ export function AppShell({ title, titleIcon, actions, fill, wide, children }: Pr
       window.removeEventListener("messages-read", poll);
     };
   }, [token]);
+
+  // Signal on site comes and goes; saying so up front explains the failures
+  // instead of leaving them looking like app bugs.
+  useEffect(() => {
+    const sync = () => setOffline(navigator.onLine === false);
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
+  }, []);
 
   function toggle() {
     setOpen((v) => {
@@ -193,6 +206,11 @@ export function AppShell({ title, titleIcon, actions, fill, wide, children }: Pr
           <button className="icon-btn" type="button" aria-label="Notifications"><IconBell /></button>
           {actions}
         </header>
+        {offline && (
+          <div className="offline-bar" role="status">
+            No connection — changes can't be saved until you're back online.
+          </div>
+        )}
         <div className="app-body">
           <div className={`app-body-inner ${wide ? "app-body-wide" : ""}`}>{children}</div>
         </div>
